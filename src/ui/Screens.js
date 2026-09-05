@@ -493,6 +493,8 @@ export function settingsScreen({ onBack, input }) {
         <label class="row"><span>効果音 音量</span><input type="range" id="st-sfx" min="0" max="1" step="0.05" value="${s.get('sfxVolume')}"></label>
         <label class="row"><span>キャラクターボイス（音声合成）</span><input type="checkbox" id="st-voice" ${s.get('voice') ? 'checked' : ''}></label>
         <h3>操作</h3>
+        <div class="row"><span>ハンドルの効き</span><input type="range" id="st-steersens" min="0.6" max="1.8" step="0.1" value="${s.get('steerSensitivity')}"></div>
+        <p class="hint indent">右にするほど、少し指を動かすだけで大きく曲がります。</p>
         <label class="row"><span>ジャイロ操作（傾けてハンドル）</span><input type="checkbox" id="st-gyro" ${s.get('gyro') ? 'checked' : ''}></label>
         <div class="row indent"><span>ジャイロ感度</span><input type="range" id="st-gyrosens" min="0.5" max="2" step="0.1" value="${s.get('gyroSensitivity')}"></div>
         <label class="row indent"><span>ジャイロ左右反転</span><input type="checkbox" id="st-gyroinv" ${s.get('gyroInvert') ? 'checked' : ''}></label>
@@ -536,6 +538,7 @@ export function settingsScreen({ onBack, input }) {
     } else input.disableGyro();
     s.set('gyro', q('#st-gyro').checked);
   });
+  q('#st-steersens').addEventListener('input', () => s.set('steerSensitivity', Number(q('#st-steersens').value)));
   q('#st-gyrosens').addEventListener('input', () => s.set('gyroSensitivity', Number(q('#st-gyrosens').value)));
   q('#st-gyroinv').addEventListener('change', () => s.set('gyroInvert', q('#st-gyroinv').checked));
   click(el, '[data-act=calib]', () => {

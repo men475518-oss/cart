@@ -5,7 +5,7 @@ import { MAX_COINS } from './KartPhysics.js';
 
 const RESPAWN_SEC = 25;
 const PICK_RADIUS = 1.7;
-const HIDE_NEAR_CAM = 4.2; // カメラの真下に来たコインは画面いっぱいの黄色い板になるので消す（水平距離で判定）
+const HIDE_NEAR_CAM = 6.2; // カメラのすぐそばに来たコインは画面いっぱいの黄色い板になるので消す
 
 const _m4 = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
@@ -43,10 +43,8 @@ export class CoinSystem {
       let sc = st.active ? 1 : 0.0001;
       if (sc > 0.5 && cams) {
         for (const c of cams) {
-          const dx = _pos.x - c.x;
-          const dz = _pos.z - c.z;
-          // カメラはカートの 8m ほど後ろなので、ここで消えても走行中の視界には影響しない
-          if (dx * dx + dz * dz < HIDE_NEAR_CAM * HIDE_NEAR_CAM) {
+          // カメラはカートから 8m 以上離れているので、取れる位置のコインは消えない
+          if (_pos.distanceToSquared(c) < HIDE_NEAR_CAM * HIDE_NEAR_CAM) {
             sc = 0.0001;
             break;
           }

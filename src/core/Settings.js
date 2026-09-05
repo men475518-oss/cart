@@ -6,6 +6,7 @@ const DEFAULTS = {
   bgmVolume: 0.6,
   sfxVolume: 0.9,
   voice: true,        // キャラクターボイス（音声合成）
+  steerSensitivity: 1.0, // タッチのハンドルの効き（大きいほど少ない指の動きで曲がる）
   gyro: false,        // ジャイロ操作
   gyroSensitivity: 1.0,
   autoAccel: false,   // 自動アクセル（片手プレイ向け）
