@@ -56,6 +56,10 @@ GitHub Pages は静的ファイル配信のみで WebSocket サーバーを動�
 
 中継サーバーは **Cloudflare Workers の無料プラン**に置けます（無料プランで WebSocket が使えます）。
 
+ブラウザだけで公開する場合は、Cloudflare ダッシュボードの **Workers & Pages → Create → Workers → Import a repository** でこのリポジトリを選び、Worker 名を `mofukart-server`、Deploy command を `npx wrangler deploy` にします。
+
+コマンドから公開する場合は次の 2 つです。
+
 ```bash
 npx wrangler login      # 初回だけ。ブラウザで Cloudflare にログイン
 npm run worker:deploy   # 表示された workers.dev の URL をゲームの「サーバー設定」に入力

@@ -14,13 +14,15 @@ export class HUD {
       <div class="hud-topleft">
         <div class="hud-pos"><span class="hud-pos-num">-</span><span class="hud-pos-suffix">位</span></div>
         <div class="hud-lap">LAP <span class="hud-lap-cur">1</span>/<span class="hud-lap-max">3</span></div>
+        <div class="hud-coins"><span class="hud-coin-icon">🪙</span><span class="hud-coin-num">0</span></div>
         <div class="hud-time">0:00.000</div>
       </div>
       <div class="hud-items">
-        <div class="hud-item"><div class="hud-item-icon"></div><div class="hud-item-badge"></div></div>
-        <div class="hud-item hud-item-2" style="display:none"><div class="hud-item-icon"></div><div class="hud-item-badge"></div></div>
+        <div class="hud-item"><div class="hud-item-icon">?</div><div class="hud-item-badge"></div></div>
+        <div class="hud-item hud-item-2" style="display:none"><div class="hud-item-icon">?</div><div class="hud-item-badge"></div></div>
       </div>
       <div class="hud-minimap"><canvas width="140" height="140"></canvas></div>
+      <div class="hud-lines"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div class="hud-center"></div>
       <div class="hud-sub"></div>
       <div class="hud-wrongway">⚠ 逆走！</div>
@@ -35,6 +37,8 @@ export class HUD {
     this.lapCur = this.q('.hud-lap-cur');
     this.lapMax = this.q('.hud-lap-max');
     this.timeEl = this.q('.hud-time');
+    this.coinEl = this.q('.hud-coin-num');
+    this.coinBox = this.q('.hud-coins');
     this.itemEls = [this.q('.hud-item'), this.q('.hud-item-2')];
     this.centerEl = this.q('.hud-center');
     this.subEl = this.q('.hud-sub');
@@ -42,6 +46,7 @@ export class HUD {
     this.speedEl = this.q('.hud-speed span');
     this.flashEl = this.q('.hud-flash');
     this.effectEl = this.q('.hud-effect');
+    this.linesEl = this.q('.hud-lines');
     this.pauseBtn = this.q('.hud-pause');
     this.mm = this.q('.hud-minimap canvas');
     this.mmCtx = this.mm.getContext('2d');
@@ -122,9 +127,19 @@ export class HUD {
       this.lapMax.textContent = v.laps;
     }
     this.timeEl.textContent = formatTime(v.time);
+    if (v.coins !== this._coins) {
+      const up = v.coins > (this._coins ?? 0);
+      this._coins = v.coins;
+      this.coinEl.textContent = v.coins;
+      this.coinBox.classList.toggle('full', v.coins >= (v.maxCoins || 10));
+      this.coinBox.classList.remove('pop', 'drop');
+      void this.coinBox.offsetWidth;
+      this.coinBox.classList.add(up ? 'pop' : 'drop');
+    }
     this.speedEl.textContent = Math.round(Math.abs(v.speed) * 3.2);
     this.wrongEl.style.display = v.wrongWay ? '' : 'none';
     // アイテム
+    this.itemEls[0].classList.toggle('held', !!v.held);
     const key = JSON.stringify([v.items.map((i) => i.id + i.uses), v.roulette ? v.roulette.current : null, v.capacity, v.golden]);
     if (key !== this._lastItemKey) {
       this._lastItemKey = key;
@@ -151,8 +166,9 @@ export class HUD {
           el.style.setProperty('--item-color', def.color);
           badge.textContent = it.id === 'goldenMushroom' && v.golden ? '★' : it.uses > 1 ? '×' + it.uses : def.badge || '';
         } else {
-          icon.textContent = '';
+          icon.textContent = '?';
           badge.textContent = '';
+          el.style.removeProperty('--item-color');
         }
       }
     }
@@ -178,6 +194,8 @@ export class HUD {
     if (eff !== this._eff) {
       this._eff = eff;
       this.effectEl.className = 'hud-effect ' + eff;
+      // ダッシュ中は放射状のスピードラインを流す
+      this.linesEl.classList.toggle('on', eff === 'boost' || eff === 'star');
     }
   }
 

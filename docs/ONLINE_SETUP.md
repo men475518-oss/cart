@@ -17,7 +17,30 @@ GitHub Pages はファイルを配るだけの静的配信なので、そこに�
 Cloudflare の無料プランは WebSocket に対応していて、月およそ 300 万リクエストまで無料です。
 このゲームは 1 レースあたり数百リクエスト程度なので、まず使い切りません。
 
-### 手順
+やり方は 2 通りあります。**A-1 はブラウザだけで完結**し、パソコンにコマンドを入れる必要がありません。
+
+### A-1. ブラウザだけで公開する（GitHub 連携）
+
+Cloudflare にリポジトリをつなぐと、GitHub に push するたびに自動でサーバーが更新されます。
+
+1. [Cloudflare のダッシュボード](https://dash.cloudflare.com/) を開く
+2. 左のメニューから **Workers & Pages** を選ぶ
+3. **Create**（作成）→ **Workers** → **Import a repository**（リポジトリから作成）を選ぶ
+4. GitHub との連携を求められるので許可する。対象リポジトリに **`cart`** を選ぶ
+5. 設定画面で次のようにする
+   | 項目 | 値 |
+   | --- | --- |
+   | Worker name | `mofukart-server`（`wrangler.toml` の `name` と必ず同じにする） |
+   | Git branch | サーバーのコードがあるブランチ（`main` にマージ済みなら `main`） |
+   | Build command | 空のままでよい |
+   | Deploy command | `npx wrangler deploy` |
+6. **Create / Deploy** を押す。1〜2 分でビルドが終わる
+
+完了すると `https://mofukart-server.<あなたのサブドメイン>.workers.dev` が発行されます。
+
+> Workers Builds は無料プランでも使えます（月 3,000 ビルド分）。このプロジェクトのビルドは 1 分もかかりません。
+
+### A-2. パソコンのコマンドから公開する
 
 ```bash
 # 1. Cloudflare にログインする（ブラウザが開きます。初回だけ）
@@ -36,7 +59,7 @@ https://mofukart-server.<あなたのサブドメイン>.workers.dev
 この URL をコピーして、ゲームの **オンライン対戦 → サーバー設定** の欄に貼り付けてください。
 `https://` のまま入れれば、ゲーム側が自動で `wss://` に変換して接続します。一緒に遊ぶ人にも同じ URL を伝えれば、全員が同じ部屋に入れます。
 
-### 動いているか確かめる
+### どちらの方法でも: 動いているか確かめる
 
 ブラウザで `https://<あなたの URL>/health` を開くと、次のような応答が返ります。
 

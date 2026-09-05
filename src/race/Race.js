@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { Track } from './Track.js';
 import { buildScenery, buildLights } from './Scenery.js';
 import { buildKartModel } from './KartModel.js';
-import { buildParams, createKartState, stepKart, applyBoost, spinOut, resolveKartCollision, DRIFT_TIERS } from './KartPhysics.js';
+import { buildParams, createKartState, stepKart, applyBoost, spinOut, resolveKartCollision, DRIFT_TIERS, MAX_COINS } from './KartPhysics.js';
+import { CoinSystem } from './Coins.js';
 import { AIDriver } from './AIDriver.js';
 import { ItemSystem } from './ItemSystem.js';
 import { ParticleSystem, FxManager, EFFECT_STYLES } from './Effects.js';
@@ -67,11 +68,12 @@ export class Race {
     this.scene.background = new THREE.Color(pal.skyBottom);
     this.scene.fog = new THREE.Fog(pal.fog, pal.fogNear, pal.fogFar);
     this.track = new Track(this.course);
-    this.scene.add(this.track.buildMesh(pal));
+    this.scene.add(this.track.buildMesh(pal, this.quality));
     const sc = buildScenery(this.track, this.course, this.quality);
     this.scene.add(sc.group);
     this.sceneryAnim = sc.anim;
-    this.scene.add(buildLights(pal));
+    this.lights = buildLights(pal, this.quality);
+    this.scene.add(this.lights.group);
     this.particles = new ParticleSystem(this.scene, this.quality === 'low' ? 400 : 900);
     this.fx = new FxManager(this.scene, this.particles);
 
@@ -90,6 +92,7 @@ export class Race {
         }
       : null;
     this.items = new ItemSystem({ track: this.track, scene: this.scene, karts: this.karts, rng: this.rng, events: this.events, fx: this.fx, particles: this.particles, net: netHooks });
+    this.coins = new CoinSystem({ track: this.track, scene: this.scene, karts: this.karts, events: this.events });
 
     // ビューポート（ローカル人間プレイヤー or 観戦）
     this.viewports = [];
@@ -346,10 +349,17 @@ export class Race {
       if (!canMove) inp = { ...inp, accel: 0, brake: 0, drift: false, item: false, itemPressed: false, steer: this.state === 'countdown' ? inp.steer : 0 };
       const res = stepKart(k, inp, dt, this.events, this.course.palette.night && k.params.traits.items);
       k.slip = res.slip;
-      // アイテム使用
-      if (racing && inp.itemPressed && (k.items.length > 0 || s.goldenActive)) {
-        const back = k.ai ? !!inp.itemBack : !!(inp.drift || inp.brake);
-        this.items.useItem(k, back, this.rankOf);
+      // アイテム: 押した瞬間に使用（構えられるものは後ろに保持）、離すと放つ
+      if (racing) {
+        const held = this.items.heldOf(k);
+        if (inp.itemPressed && !held && (k.items.length > 0 || s.goldenActive)) {
+          const back = k.ai ? !!inp.itemBack : !!(inp.drift || inp.brake);
+          // 人間は押しっぱなしで構える。CPU は後ろ向き指定のときだけ構える
+          const hold = k.ai ? !!inp.itemBack : true;
+          this.items.useItem(k, back, this.rankOf, hold);
+        } else if (held && (k.ai ? inp.itemReleased : inp.itemReleased)) {
+          this.items.releaseHeld(k, !(inp.drift || inp.brake));
+        }
       }
       if (k.isHuman && s.spinTime > 0 && !k._spinning) audio.voice(k.char, 'hit');
       k._spinning = s.spinTime > 0;
@@ -378,8 +388,11 @@ export class Race {
       }
     }
 
-    // ---------- アイテム ----------
-    if (racing) this.items.update(dt, this.rankOf);
+    // ---------- アイテム・コイン ----------
+    if (racing) {
+      this.items.update(dt, this.rankOf);
+      this.coins.update(dt, this.viewports.map((vp) => vp.rig.camera.position));
+    }
 
     // ---------- ラップ・順位・ゴール ----------
     this._updateRanks();
@@ -394,9 +407,18 @@ export class Race {
     this.fx.update(dt);
     const camPos = this.viewports[0]?.rig.pos;
     for (const fn of this.sceneryAnim) fn(dt, camPos, this.clock);
+    this.lights.update(this.viewports[0]?.kart?.state || camPos);
 
     // ---------- カメラ / HUD ----------
     for (const vp of this.viewports) this._updateViewport(vp, dt);
+
+    // ---------- ファイナルラップでテンポアップ ----------
+    const viewKart = this.viewports[0]?.kart;
+    const finalLap = !!viewKart && viewKart.state.lap >= this.laps && !viewKart.state.finished;
+    if (finalLap !== this._finalLapTempo) {
+      this._finalLapTempo = finalLap;
+      audio.setTempo(finalLap ? 1.12 : 1);
+    }
 
     // ---------- スター BGM ----------
     const anyStar = this.viewports.some((vp) => vp.kart && vp.kart.state.starTime > 0);
@@ -419,7 +441,7 @@ export class Race {
             tp: +s.totalProgress.toFixed(1), lap: s.lap,
             sp: s.spinTime > 0 ? 1 : 0, sq: s.squashTime > 0 ? 1 : 0, st: s.starTime > 0 ? 1 : 0,
             bo: s.boostTime > 0 ? 1 : 0, dr: s.drifting ? s.driftDir : 0, dt: s.driftTier, hop: +s.hop.toFixed(2),
-            fin: s.finished ? 1 : 0, it: k.items[0]?.id || null,
+            fin: s.finished ? 1 : 0, it: k.items[0]?.id || null, co: s.coins || 0, air: s.airborne ? 1 : 0,
           });
         }
       }
@@ -492,6 +514,8 @@ export class Race {
     s.driftDir = t.dr || 0;
     s.driftTier = t.dt ?? -1;
     s.hop = t.hop || 0;
+    s.coins = t.co || 0;
+    s.airborne = !!t.air;
     if (t.fin && !s.finished) {
       s.finished = true;
       s.finishTime = s.finishTime ?? this.time;
@@ -664,6 +688,12 @@ export class Race {
             if (isView) audio.voice(k.char, 'hit');
             else if (near > 0.5 && k.char) audio.voice(k.char, 'hit', { noSpeech: true });
             this.particles.burst(k.state.x, k.state.y + 1, k.state.z, 12, [0xffffff, 0xffd23f], 6, 0.5, 8, 4);
+            const lost = k.state.coinsLost || 0;
+            if (lost > 0) {
+              k.state.coinsLost = 0;
+              if (isView) audio.sfx('coinLoss', { vol: 0.6 });
+              this.particles.burst(k.state.x, k.state.y + 1, k.state.z, lost * 4, [0xffd23f, 0xfff3b0], 7, 0.9, 9, 5);
+            }
           }
           if (e.by && this._isView(e.by) && e.by !== k) audio.voice(e.by.char, 'pass');
           break;
@@ -748,6 +778,33 @@ export class Race {
         case 'drop':
           if (near > 0.2) audio.sfx('drop', { vol: near * 0.6 });
           break;
+        case 'coin':
+          if (isView) audio.sfx('coin', { vol: 0.7 });
+          this.particles.burst(e.x, e.y, e.z, 8, [0xffd23f, 0xfff3b0], 4, 0.4, 4, 2);
+          break;
+        case 'jump':
+          if (near > 0) audio.sfx('jump', { vol: isView ? 0.8 : near * 0.4 });
+          break;
+        case 'trick':
+          if (near > 0) audio.sfx('trick', { vol: isView ? 1 : near * 0.5 });
+          if (isView) {
+            for (const h of this._hudOf(k)) h.sub('トリック！');
+            audio.voice(k.char, 'boost', { minInterval: 4000 });
+          }
+          this.particles.burst(k.state.x, k.state.y + k.state.hop + 1, k.state.z, 16, [0xffd23f, 0xffffff, 0x4cc9f0], 7, 0.6, 2, 3);
+          break;
+        case 'land':
+          if (near > 0) audio.sfx('land', { vol: isView ? 0.7 : near * 0.4 });
+          if (e.trick) this._boostBurst(k);
+          this.particles.burst(k.state.x, k.state.y + 0.2, k.state.z, 8, [0xffffff, 0xdddddd], 4, 0.35, 5, 1);
+          break;
+        case 'itemHold':
+          if (isView) audio.sfx('itemGet', { vol: 0.5 });
+          break;
+        case 'shieldBlock':
+          if (near > 0) audio.sfx('shield', { vol: isView ? 1 : near * 0.5 });
+          if (isView) for (const h of this._hudOf(k)) h.sub('ガード！');
+          break;
         case 'boomerangCatch':
           if (isView) audio.sfx('itemGet', { vol: 0.5 });
           break;
@@ -802,12 +859,22 @@ export class Race {
     m.setHop(s.hop);
     m.setSteer(s.steerVis);
     m.roll(s.speed * dt);
-    const roll = -s.steerVis * 0.07 - (s.drifting ? s.driftDir * 0.1 : 0) - clamp(k.slip || 0, -0.5, 0.5) * 0.15;
-    const pitch = s.boostTime > 0 ? -0.06 : s.hop > 0 ? -0.1 : 0;
+    let roll = -s.steerVis * 0.07 - (s.drifting ? s.driftDir * 0.1 : 0) - clamp(k.slip || 0, -0.5, 0.5) * 0.15;
+    let pitch = s.boostTime > 0 ? -0.06 : s.hop > 0 ? -0.1 : 0;
+    if (s.airborne) {
+      // 上昇中は機首上げ、落下中は下げ。トリック中は大きく傾ける
+      pitch = clamp(-s.vy * 0.02, -0.25, 0.25);
+      if (s.tricked) {
+        k.trickSpin = (k.trickSpin || 0) + dt * 9;
+        roll += Math.sin(k.trickSpin) * 0.55;
+        pitch += Math.cos(k.trickSpin) * 0.2;
+      }
+    } else k.trickSpin = 0;
     m.setTilt(roll, pitch);
     const targetScale = s.squashTime > 0 ? 0.5 : 1;
     k.visScale = damp(k.visScale, targetScale, 10, dt);
     m.setSquash(k.visScale);
+    m.setLandSquash(s.landSquash || 0);
     if (s.starTime > 0) {
       m.setStar(this.clock);
       k.starWas = true;
@@ -817,7 +884,7 @@ export class Race {
       m.setStar(null);
     }
     // ドリフト火花
-    if (s.drifting && s.hop <= 0 && this.quality !== 'low' || (s.drifting && s.hop <= 0 && Math.random() < 0.5)) {
+    if (s.drifting && !s.airborne && s.hop <= 0 && (this.quality !== 'low' || Math.random() < 0.5)) {
       const eff = k.char.driftEffect;
       const st = EFFECT_STYLES[eff.style] || EFFECT_STYLES.stars;
       const colors = s.driftTier >= 0 ? [DRIFT_TIERS[s.driftTier].color, ...eff.colors] : eff.colors;
@@ -886,6 +953,9 @@ export class Race {
       star: s.starTime > 0,
       squash: s.squashTime > 0,
       boost: s.boostTime > 0,
+      coins: s.coins || 0,
+      maxCoins: MAX_COINS,
+      held: !!this.items.heldOf(k),
       karts: this.karts.filter((x) => !x.gone).map((x) => ({ x: x.state.x, z: x.state.z, me: x === k, color: x.color })),
     });
     if (vp.engine) {
@@ -922,8 +992,10 @@ export class Race {
       if (vp.engine) vp.engine.stop();
     }
     audio.stopAllEngines();
+    audio.setTempo(1);
     if (this.starBgm) audio.popBgm();
     this.items.dispose();
+    this.coins.dispose();
     this.particles.dispose();
     this.fx.dispose();
     if (this.net && this._netHandlers) for (const [t, h] of Object.entries(this._netHandlers)) this.net.off(t, h);

@@ -330,6 +330,28 @@ class AudioEngine {
       case 'splash':
         this._noiseBurst({ dur: 0.35, vol: 0.25 * v, filter: 'bandpass', freq: 900, q: 0.8, sweepTo: 300 });
         break;
+      case 'coin':
+        this._tone({ freq: 988, type: 'sine', dur: 0.07, vol: 0.18 * v });
+        this._tone({ freq: 1319, type: 'sine', t: t + 0.07, dur: 0.22, vol: 0.18 * v });
+        break;
+      case 'coinLoss':
+        for (let i = 0; i < 3; i++) this._tone({ freq: 900 - i * 150, type: 'triangle', t: t + i * 0.07, dur: 0.1, vol: 0.12 * v });
+        break;
+      case 'jump':
+        this._noiseBurst({ dur: 0.3, vol: 0.18 * v, filter: 'bandpass', freq: 500, sweepTo: 2500, q: 1.2 });
+        break;
+      case 'trick':
+        this._noiseBurst({ dur: 0.25, vol: 0.2 * v, filter: 'bandpass', freq: 1500, sweepTo: 4000, q: 1.5 });
+        [880, 1109, 1319].forEach((f, i) => this._tone({ freq: f, type: 'triangle', t: t + i * 0.06, dur: 0.18, vol: 0.14 * v }));
+        break;
+      case 'land':
+        this._noiseBurst({ dur: 0.15, vol: 0.25 * v, filter: 'lowpass', freq: 900 });
+        this._tone({ freq: 90, type: 'sine', dur: 0.12, vol: 0.25 * v, sweepTo: 50 });
+        break;
+      case 'shield':
+        this._tone({ freq: 1760, type: 'triangle', dur: 0.25, vol: 0.18 * v, sweepTo: 880 });
+        this._noiseBurst({ dur: 0.12, vol: 0.15 * v, filter: 'highpass', freq: 3000 });
+        break;
       case 'confetti':
         for (let i = 0; i < 8; i++) this._tone({ freq: 800 + Math.random() * 1200, type: 'triangle', t: t + i * 0.05, dur: 0.1, vol: 0.06 * v });
         break;
@@ -413,6 +435,7 @@ class AudioEngine {
     if (!def) return;
     this.bgm.id = id;
     this.bgm.def = def;
+    this.bgm.tempoMult = 1;
     this.bgm.step = 0;
     this.bgm.nextTime = this.ctx.currentTime + 0.1;
     this.bgm.gain = this.ctx.createGain();
@@ -426,6 +449,11 @@ class AudioEngine {
     this.bgm.gain.connect(delay).connect(dg).connect(this.bgmGain);
     this.bgm.delayNodes = [delay, dg];
     this.bgm.timer = setInterval(() => this._schedule(), 30);
+  }
+
+  /** BGM のテンポ倍率（ファイナルラップで速くする） */
+  setTempo(mult = 1) {
+    this.bgm.tempoMult = mult;
   }
 
   /** スター用の一時 BGM 切り替え */
@@ -458,7 +486,7 @@ class AudioEngine {
     const b = this.bgm;
     if (!b.def || !this.ctx) return;
     const d = b.def;
-    const stepDur = 60 / d.bpm / 4;
+    const stepDur = 60 / (d.bpm * (b.tempoMult || 1)) / 4;
     while (b.nextTime < this.ctx.currentTime + 0.15) {
       const i = b.step;
       const swing = i % 2 === 1 ? stepDur * d.swing : 0;

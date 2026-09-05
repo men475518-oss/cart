@@ -3,20 +3,21 @@ import * as THREE from 'three';
 import { ITEMS, itemWeightsForRank } from '../data/items.js';
 import { weightedPick, wrapAngle, clamp, uid } from '../core/Utils.js';
 import { applyBoost, spinOut, knockBack } from './KartPhysics.js';
+import { toonMat } from './Materials.js';
 
 const KART_R = 1.2;
 
 // ---------- ハザードのメッシュ ----------
 function shellMesh(color) {
   const g = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color }));
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), toonMat(color));
   g.add(top);
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.55, 0.22, 12), new THREE.MeshLambertMaterial({ color: 0xfff4d6 }));
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.55, 0.22, 12), toonMat(0xfff4d6));
   rim.position.y = -0.1;
   g.add(rim);
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
-    const spot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 5), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    const spot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 5), toonMat(0xffffff));
     spot.position.set(Math.cos(a) * 0.38, 0.32, Math.sin(a) * 0.38);
     g.add(spot);
   }
@@ -24,11 +25,11 @@ function shellMesh(color) {
 }
 function bananaMesh() {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), new THREE.MeshLambertMaterial({ color: 0xffe066 }));
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), toonMat(0xffe066));
   body.scale.set(1, 0.55, 1);
   g.add(body);
   for (let i = 0; i < 3; i++) {
-    const peel = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.9, 5), new THREE.MeshLambertMaterial({ color: 0xffd23f }));
+    const peel = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.9, 5), toonMat(0xffd23f));
     const a = (i / 3) * Math.PI * 2;
     peel.position.set(Math.cos(a) * 0.4, 0.45, Math.sin(a) * 0.4);
     peel.rotation.z = -Math.cos(a) * 0.9;
@@ -39,9 +40,9 @@ function bananaMesh() {
 }
 function bombMesh() {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 10), new THREE.MeshLambertMaterial({ color: 0x2b2b3b }));
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 10), toonMat(0x2b2b3b));
   g.add(body);
-  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4, 5), new THREE.MeshLambertMaterial({ color: 0xaaaaaa }));
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4, 5), toonMat(0xaaaaaa));
   fuse.position.y = 0.7;
   g.add(fuse);
   const spark = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
@@ -59,7 +60,7 @@ function bombMesh() {
 }
 function boomerangMesh() {
   const g = new THREE.Group();
-  const m = new THREE.MeshLambertMaterial({ color: 0xf4a261 });
+  const m = toonMat(0xf4a261);
   const a = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 0.35), m);
   a.position.x = 0.5;
   const b = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 1.4), m);
@@ -67,14 +68,45 @@ function boomerangMesh() {
   g.add(a, b);
   return g;
 }
+let _qmarkTex = null;
+function questionMarkTexture() {
+  if (_qmarkTex) return _qmarkTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 52px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('?', 32, 36);
+  _qmarkTex = new THREE.CanvasTexture(c);
+  _qmarkTex.colorSpace = THREE.SRGBColorSpace;
+  return _qmarkTex;
+}
+
 export function itemBoxMesh() {
   const g = new THREE.Group();
   const cube = new THREE.Mesh(
     new THREE.BoxGeometry(1.5, 1.5, 1.5),
-    new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, emissive: 0x4488ff, emissiveIntensity: 0.6 })
+    new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, emissive: 0x4488ff, emissiveIntensity: 0.6 })
   );
   g.add(cube);
-  const inner = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+  // 各面に「?」
+  const qm = questionMarkTexture();
+  const faces = [
+    [0, 0, 0.77, 0, 0],
+    [0, 0, -0.77, 0, Math.PI],
+    [0.77, 0, 0, 0, Math.PI / 2],
+    [-0.77, 0, 0, 0, -Math.PI / 2],
+  ];
+  for (const [x, y, z, rx, ry] of faces) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: qm, transparent: true, depthWrite: false }));
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, 0);
+    cube.add(m);
+  }
+  const inner = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
   g.add(inner);
   g.userData.cube = cube;
   g.userData.inner = inner;
@@ -170,12 +202,25 @@ export class ItemSystem {
         if (idx >= 0) k.items.splice(idx, 1);
       }
     }
+    // 構えているアイテムを持ち主の後ろに追従させる
+    for (const h of this.hazards) {
+      if (h.dead || !h.heldBy) continue;
+      const os = h.heldBy.state;
+      const back = h.type === 'banana' ? 2.6 : 2.9;
+      h.x = os.x - Math.sin(os.heading) * back;
+      h.z = os.z - Math.cos(os.heading) * back;
+      const hq = this.track.query(h, os.trackIndex);
+      h.y = hq.height + 0.5 + (os.hop || 0);
+      h.index = hq.index;
+      h.mesh.position.set(h.x, h.y, h.z);
+      if (h.type !== 'banana') h.mesh.rotation.y += dt * 4;
+    }
     // ハザード
     for (let i = this.hazards.length - 1; i >= 0; i--) {
       const h = this.hazards[i];
       h.age += dt;
-      h.ttl -= dt;
-      this._moveHazard(h, dt);
+      if (!h.heldBy) h.ttl -= dt;
+      if (!h.heldBy) this._moveHazard(h, dt);
       if (h.ttl <= 0 && !h.dead) {
         if (h.type === 'bomb') this._explode(h);
         h.dead = true;
@@ -194,7 +239,9 @@ export class ItemSystem {
         if (i === j) continue;
         const b = this.hazards[j];
         if (b.dead || b.type === 'boomerang') continue;
+        if (a.heldBy && a.heldBy === b.heldBy) continue;
         if (Math.hypot(a.x - b.x, a.z - b.z) < 1.6) {
+          if (b.heldBy) this.events.push({ type: 'shieldBlock', kart: b.heldBy });
           this._destroy(a, true);
           this._destroy(b, true);
         }
@@ -329,7 +376,8 @@ export class ItemSystem {
       if (k.remote) continue; // リモートのカートは相手側で判定
       const s = k.state;
       if (s.finished && h.type !== 'banana') continue;
-      if (h.owner === k && h.age < (h.type === 'boomerang' ? 0.5 : h.type === 'banana' ? 1.0 : 0.6)) continue;
+      if (h.heldBy === k) continue; // 構えている本人には当たらない
+      if (h.owner === k && !h.heldBy && h.age < (h.type === 'boomerang' ? 0.5 : h.type === 'banana' ? 1.0 : 0.6)) continue;
       if (h.type === 'boomerang' && h.owner === k) continue;
       if (h.hitCooldown && h.hitCooldown.get(k) > this.time) continue;
       const dx = s.x - h.x;
@@ -445,10 +493,77 @@ export class ItemSystem {
     return h;
   }
 
-  /** アイテム使用。back = 後ろに投げる */
-  useItem(kart, back = false, rankOf = null) {
+  /** 持ち主が構えているハザード */
+  heldOf(kart) {
+    return this.hazards.find((h) => !h.dead && h.heldBy === kart) || null;
+  }
+
+  /** 構えていたアイテムを放す。前方向きなら投げ、後ろ向きならその場に置く */
+  releaseHeld(kart, forward = true) {
+    const h = this.heldOf(kart);
+    if (!h) return false;
+    const s = kart.state;
+    h.heldBy = null;
+    h.age = 0;
+    if (h.type === 'banana') {
+      h.ttl = 40;
+    } else if (forward) {
+      const fx = Math.sin(s.heading);
+      const fz = Math.cos(s.heading);
+      h.x = s.x + fx * 2.5;
+      h.z = s.z + fz * 2.5;
+      const sp = h.type === 'redShell' ? 66 : 70;
+      h.vx = fx * sp;
+      h.vz = fz * sp;
+      h.ttl = h.type === 'redShell' ? 12 : 9;
+      this.events.push({ type: 'itemUse', kart, item: h.type, sfx: 'shell' });
+    } else {
+      const sp = h.type === 'redShell' ? 66 : 70;
+      h.vx = -Math.sin(s.heading) * sp;
+      h.vz = -Math.cos(s.heading) * sp;
+      h.ttl = 9;
+      this.events.push({ type: 'itemUse', kart, item: h.type, sfx: 'shell' });
+    }
+    if (this.net) this.net.sendSpawn({ id: h.id, type: h.type, x: h.x, z: h.z, heading: Math.atan2(h.vx, h.vz), ownerId: kart.id, targetId: h.target?.id || null });
+    return true;
+  }
+
+  /** 後ろに構えられるアイテムか */
+  canHold(id) {
+    return id === 'banana' || id === 'greenShell' || id === 'redShell';
+  }
+
+  /** アイテム使用。back = 後ろに投げる / hold = 後ろに構える */
+  useItem(kart, back = false, rankOf = null, hold = false) {
     if (kart.items.length === 0) return false;
     const it = kart.items[0];
+    // 構える（防御）: バナナ・こうらを後ろに保持して盾にする
+    if (hold && this.canHold(it.id) && !this.heldOf(kart)) {
+      const s0 = kart.state;
+      let target = null;
+      if (it.id === 'redShell' && rankOf) {
+        const myRank = rankOf(kart);
+        let best = null;
+        for (const o of this.karts) {
+          if (o === kart || o.state.finished) continue;
+          const r = rankOf(o);
+          if (r < myRank && (best === null || r > rankOf(best))) best = o;
+        }
+        target = best;
+      }
+      const h = this.spawnHazard(
+        { id: uid(), type: it.id, x: s0.x - Math.sin(s0.heading) * 2.8, z: s0.z - Math.cos(s0.heading) * 2.8, heading: s0.heading, ownerId: kart.id, targetId: target ? target.id : null },
+        false
+      );
+      if (h) {
+        h.heldBy = kart;
+        h.vx = h.vz = 0;
+        it.uses--;
+        if (it.uses <= 0) kart.items.shift();
+        this.events.push({ type: 'itemHold', kart, item: it.id });
+        return true;
+      }
+    }
     const s = kart.state;
     const fx = Math.sin(s.heading);
     const fz = Math.cos(s.heading);

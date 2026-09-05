@@ -1,6 +1,7 @@
 // テーマごとの背景・装飾（草原 / ビーチ / 雪山 / 火山 / 夜の街）
 import * as THREE from 'three';
 import { makeRng } from '../core/Utils.js';
+import { toonMat, groundTexture } from './Materials.js';
 
 function skyDome(top, bottom) {
   const geo = new THREE.SphereGeometry(900, 24, 12);
@@ -81,9 +82,15 @@ export function buildScenery(track, course, quality = 'high') {
   group.add(skyDome(pal.skyTop, pal.skyBottom));
 
   // 地面
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshLambertMaterial({ color: pal.ground }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), toonMat(pal.ground, { map: groundTexture(3) }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = groundY;
+  ground.receiveShadow = true;
+  const gt = ground.material.map;
+  if (gt) {
+    gt.repeat.set(60, 60);
+    gt.needsUpdate = true;
+  }
   group.add(ground);
 
   // 太陽 / 月
@@ -96,7 +103,7 @@ export function buildScenery(track, course, quality = 'high') {
 
   // 雲（夜以外）
   if (!pal.night) {
-    const clouds = instanced(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x666666 }), 100);
+    const clouds = instanced(new THREE.SphereGeometry(1, 8, 6), toonMat(0xffffff, { emissive: 0x666666 }), 100);
     for (let i = 0; i < 16 * dense; i++) {
       const cx = rng.range(-500, 500);
       const cz = rng.range(-600, 300);
@@ -114,8 +121,8 @@ export function buildScenery(track, course, quality = 'high') {
   }
 
   if (theme === 'meadow') {
-    const trunks = instanced(new THREE.CylinderGeometry(0.35, 0.5, 2.4, 6), new THREE.MeshLambertMaterial({ color: 0x8d5a2b }), 200);
-    const leaves = instanced(new THREE.SphereGeometry(2.2, 8, 6), new THREE.MeshLambertMaterial({ color: 0x3e9d3a }), 600);
+    const trunks = instanced(new THREE.CylinderGeometry(0.35, 0.5, 2.4, 6), toonMat(0x8d5a2b), 200);
+    const leaves = instanced(new THREE.SphereGeometry(2.2, 8, 6), toonMat(0x3e9d3a), 600);
     for (let i = 0; i < 90 * dense; i++) {
       const p = place(3, 160);
       if (!p) continue;
@@ -126,7 +133,7 @@ export function buildScenery(track, course, quality = 'high') {
       addInstance(leaves, p.x - 1.0 * s, groundY + 2.8 * s, p.z - 0.8 * s, 0, s * 0.75);
     }
     group.add(trunks, leaves);
-    const flowers = instanced(new THREE.SphereGeometry(0.35, 6, 5), new THREE.MeshLambertMaterial({ color: 0xffffff }), 400);
+    const flowers = instanced(new THREE.SphereGeometry(0.35, 6, 5), toonMat(0xffffff), 400);
     const fcolors = [0xff5c8a, 0xffd23f, 0xffffff, 0xb388ff, 0xff8c42];
     for (let i = 0; i < 300 * dense; i++) {
       const p = place(0.5, 90);
@@ -138,15 +145,15 @@ export function buildScenery(track, course, quality = 'high') {
     group.add(flowers);
     // 風車
     const wm = new THREE.Group();
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 3.2, 16, 8), new THREE.MeshLambertMaterial({ color: 0xf1e3c6 }));
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 3.2, 16, 8), toonMat(0xf1e3c6));
     tower.position.y = 8;
     wm.add(tower);
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(3.4, 3, 8), new THREE.MeshLambertMaterial({ color: 0xc0392b }));
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(3.4, 3, 8), toonMat(0xc0392b));
     roof.position.y = 17.5;
     wm.add(roof);
     const blades = new THREE.Group();
     for (let k = 0; k < 4; k++) {
-      const bl = new THREE.Mesh(new THREE.BoxGeometry(1.2, 7, 0.2), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(1.2, 7, 0.2), toonMat(0xffffff));
       bl.position.y = 3.5;
       const holder = new THREE.Group();
       holder.add(bl);
@@ -160,13 +167,13 @@ export function buildScenery(track, course, quality = 'high') {
     group.add(wm);
     anim.push((dt) => (blades.rotation.z += dt * 0.8));
   } else if (theme === 'beach') {
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshLambertMaterial({ color: 0x2f8fe0 }));
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), toonMat(0x2f8fe0));
     sea.rotation.x = -Math.PI / 2;
     sea.position.y = groundY - 0.15;
     group.add(sea);
     ground.geometry = new THREE.PlaneGeometry(720, 720);
-    const trunks = instanced(new THREE.CylinderGeometry(0.28, 0.45, 7, 6), new THREE.MeshLambertMaterial({ color: 0xa0703c }), 120);
-    const leaves = instanced(new THREE.ConeGeometry(0.9, 4.5, 4), new THREE.MeshLambertMaterial({ color: 0x2fa84f }), 800);
+    const trunks = instanced(new THREE.CylinderGeometry(0.28, 0.45, 7, 6), toonMat(0xa0703c), 120);
+    const leaves = instanced(new THREE.ConeGeometry(0.9, 4.5, 4), toonMat(0x2fa84f), 800);
     for (let i = 0; i < 70 * dense; i++) {
       const p = place(3, 140);
       if (!p) continue;
@@ -186,8 +193,8 @@ export function buildScenery(track, course, quality = 'high') {
       }
     }
     group.add(trunks, leaves);
-    const poles = instanced(new THREE.CylinderGeometry(0.08, 0.08, 3, 5), new THREE.MeshLambertMaterial({ color: 0xffffff }), 40);
-    const tops = instanced(new THREE.ConeGeometry(2.2, 1.1, 8), new THREE.MeshLambertMaterial({ color: 0xffffff }), 40);
+    const poles = instanced(new THREE.CylinderGeometry(0.08, 0.08, 3, 5), toonMat(0xffffff), 40);
+    const tops = instanced(new THREE.ConeGeometry(2.2, 1.1, 8), toonMat(0xffffff), 40);
     const pcolors = [0xff5c5c, 0xffd23f, 0x4cc9f0, 0xff8fb1];
     for (let i = 0; i < 20 * dense; i++) {
       const p = place(2, 60);
@@ -198,16 +205,16 @@ export function buildScenery(track, course, quality = 'high') {
     }
     if (tops.instanceColor) tops.instanceColor.needsUpdate = true;
     group.add(poles, tops);
-    const rocks = instanced(new THREE.DodecahedronGeometry(1.4, 0), new THREE.MeshLambertMaterial({ color: 0x8e8e8e }), 60);
+    const rocks = instanced(new THREE.DodecahedronGeometry(1.4, 0), toonMat(0x8e8e8e), 60);
     for (let i = 0; i < 30 * dense; i++) {
       const p = place(1, 120);
       if (p) addInstance(rocks, p.x, groundY + 0.6, p.z, rng.range(0, 6), rng.range(0.6, 1.6));
     }
     group.add(rocks);
   } else if (theme === 'snow') {
-    const trunks = instanced(new THREE.CylinderGeometry(0.3, 0.4, 1.6, 6), new THREE.MeshLambertMaterial({ color: 0x5b3a1e }), 200);
-    const cones = instanced(new THREE.ConeGeometry(2.2, 4, 7), new THREE.MeshLambertMaterial({ color: 0x2f6b4f }), 600);
-    const snowCaps = instanced(new THREE.ConeGeometry(1.2, 1.6, 7), new THREE.MeshLambertMaterial({ color: 0xffffff }), 200);
+    const trunks = instanced(new THREE.CylinderGeometry(0.3, 0.4, 1.6, 6), toonMat(0x5b3a1e), 200);
+    const cones = instanced(new THREE.ConeGeometry(2.2, 4, 7), toonMat(0x2f6b4f), 600);
+    const snowCaps = instanced(new THREE.ConeGeometry(1.2, 1.6, 7), toonMat(0xffffff), 200);
     for (let i = 0; i < 110 * dense; i++) {
       const p = place(3, 170);
       if (!p) continue;
@@ -218,8 +225,8 @@ export function buildScenery(track, course, quality = 'high') {
       addInstance(snowCaps, p.x, groundY + 6.6 * s, p.z, 0.2, s);
     }
     group.add(trunks, cones, snowCaps);
-    const balls = instanced(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshLambertMaterial({ color: 0xffffff }), 60);
-    const noses = instanced(new THREE.ConeGeometry(0.15, 0.7, 6), new THREE.MeshLambertMaterial({ color: 0xff7f2a }), 30);
+    const balls = instanced(new THREE.SphereGeometry(1, 10, 8), toonMat(0xffffff), 60);
+    const noses = instanced(new THREE.ConeGeometry(0.15, 0.7, 6), toonMat(0xff7f2a), 30);
     for (let i = 0; i < 14 * dense; i++) {
       const p = place(1.5, 70);
       if (!p) continue;
@@ -237,7 +244,7 @@ export function buildScenery(track, course, quality = 'high') {
       const a = (i / 9) * Math.PI * 2 + rng.range(-0.2, 0.2);
       const r = rng.range(380, 520);
       const h = rng.range(120, 220);
-      const mtn = new THREE.Mesh(new THREE.ConeGeometry(h * 0.9, h, 6), new THREE.MeshLambertMaterial({ color: 0xd9e8ff }));
+      const mtn = new THREE.Mesh(new THREE.ConeGeometry(h * 0.9, h, 6), toonMat(0xd9e8ff));
       mtn.position.set(Math.cos(a) * r, groundY + h / 2 - 5, Math.sin(a) * r);
       group.add(mtn);
     }
@@ -265,14 +272,14 @@ export function buildScenery(track, course, quality = 'high') {
       sg.attributes.position.needsUpdate = true;
     });
   } else if (theme === 'volcano') {
-    const volcano = new THREE.Mesh(new THREE.ConeGeometry(220, 240, 9), new THREE.MeshLambertMaterial({ color: 0x3b2323 }));
+    const volcano = new THREE.Mesh(new THREE.ConeGeometry(220, 240, 9), toonMat(0x3b2323));
     volcano.position.set(-40, groundY + 115, -560);
     group.add(volcano);
     const glow = new THREE.Mesh(new THREE.SphereGeometry(40, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff5a00, fog: false }));
     glow.position.set(-40, groundY + 232, -560);
     group.add(glow);
     anim.push((dt, _c, t) => glow.scale.setScalar(1 + Math.sin(t * 3) * 0.08));
-    const rocks = instanced(new THREE.DodecahedronGeometry(1.6, 0), new THREE.MeshLambertMaterial({ color: 0x4a3a3a }), 200);
+    const rocks = instanced(new THREE.DodecahedronGeometry(1.6, 0), toonMat(0x4a3a3a), 200);
     for (let i = 0; i < 100 * dense; i++) {
       const p = place(1, 160);
       if (p) addInstance(rocks, p.x, groundY + 0.8, p.z, rng.range(0, 6), rng.range(0.6, 2.4));
@@ -291,7 +298,7 @@ export function buildScenery(track, course, quality = 'high') {
     }
     group.add(pools);
     const deadGeo = new THREE.CylinderGeometry(0.2, 0.5, 6, 5);
-    const deadMat = new THREE.MeshLambertMaterial({ color: 0x2b1e1e });
+    const deadMat = toonMat(0x2b1e1e);
     const deads = instanced(deadGeo, deadMat, 40);
     for (let i = 0; i < 20 * dense; i++) {
       const p = place(2, 100);
@@ -369,7 +376,7 @@ export function buildScenery(track, course, quality = 'high') {
     const neonColors = [0xff2e88, 0x33e1ff, 0xfff275, 0x7bff7b, 0xc86bff];
     const neonMeshes = [];
     const poleGeo = new THREE.CylinderGeometry(0.1, 0.1, 1, 5);
-    const poleMat = new THREE.MeshLambertMaterial({ color: 0x555566 });
+    const poleMat = toonMat(0x555566);
     for (let i = 0; i < 28 * dense; i++) {
       const p = place(1, 40);
       if (!p) continue;
@@ -387,7 +394,7 @@ export function buildScenery(track, course, quality = 'high') {
     anim.push((dt, _c, t) => {
       for (let i = 0; i < neonMeshes.length; i++) neonMeshes[i].material.opacity = 0.7 + 0.3 * Math.sin(t * 4 + i);
     });
-    const lamps = instanced(new THREE.CylinderGeometry(0.12, 0.16, 5, 5), new THREE.MeshLambertMaterial({ color: 0x8888aa }), 120);
+    const lamps = instanced(new THREE.CylinderGeometry(0.12, 0.16, 5, 5), toonMat(0x8888aa), 120);
     const bulbs = instanced(new THREE.SphereGeometry(0.45, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff2b0 }), 120);
     for (let i = 0; i < track.N; i += 14) {
       const s = track.samples[i];
@@ -401,7 +408,7 @@ export function buildScenery(track, course, quality = 'high') {
 
   // 共通: スタート付近の風船
   const s0 = track.samples[0];
-  const balloons = instanced(new THREE.SphereGeometry(0.9, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }), 40);
+  const balloons = instanced(new THREE.SphereGeometry(0.9, 8, 6), toonMat(0xffffff), 40);
   const bcolors = [0xff5c8a, 0xffd23f, 0x4cc9f0, 0x7bff7b, 0xc86bff];
   for (let i = 0; i < 16; i++) {
     const side = i % 2 === 0 ? -1 : 1;
@@ -418,13 +425,13 @@ export function buildScenery(track, course, quality = 'high') {
 
   // スタートゲート
   const gate = new THREE.Group();
-  const gm = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const gm = toonMat(0xffffff);
   for (const side of [-1, 1]) {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 8, 8), gm);
     pole.position.set(side * (track.halfWidth + 1.5), 4, 0);
     gate.add(pole);
   }
-  const banner = new THREE.Mesh(new THREE.BoxGeometry(track.width + 4, 1.6, 0.4), new THREE.MeshLambertMaterial({ color: 0xff4d6d }));
+  const banner = new THREE.Mesh(new THREE.BoxGeometry(track.width + 4, 1.6, 0.4), toonMat(0xff4d6d));
   banner.position.y = 7.6;
   gate.add(banner);
   const bannerCanvas = document.createElement('canvas');
@@ -453,13 +460,40 @@ export function buildScenery(track, course, quality = 'high') {
   return { group, anim };
 }
 
-/** ライティング */
-export function buildLights(palette) {
+/**
+ * ライティング。太陽光はカメラの周りだけ影を落とす（範囲を絞って解像度を稼ぐ）。
+ * 戻り値の update(camPos) を毎フレーム呼ぶと影の範囲が追従する。
+ */
+export function buildLights(palette, quality = 'high') {
   const g = new THREE.Group();
-  g.add(new THREE.HemisphereLight(palette.hemiSky, palette.hemiGround, palette.night ? 0.9 : 1.1));
-  const sun = new THREE.DirectionalLight(palette.sun, palette.sunIntensity);
-  sun.position.set(120, 200, -80);
+  // 合計の明るさは 1.6 前後に抑える。強すぎると色が白飛びしてポップさが消える
+  g.add(new THREE.HemisphereLight(palette.hemiSky, palette.hemiGround, palette.night ? 0.45 : 0.55));
+  const sun = new THREE.DirectionalLight(palette.sun, palette.sunIntensity * 0.62);
+  sun.position.set(60, 90, -40);
   g.add(sun);
-  g.add(new THREE.AmbientLight(0xffffff, palette.night ? 0.25 : 0.35));
-  return g;
+  g.add(sun.target);
+  if (quality !== 'low') {
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    const d = 42;
+    sun.shadow.camera.left = -d;
+    sun.shadow.camera.right = d;
+    sun.shadow.camera.top = d;
+    sun.shadow.camera.bottom = -d;
+    sun.shadow.camera.near = 10;
+    sun.shadow.camera.far = 260;
+    sun.shadow.bias = -0.0016;
+    sun.shadow.normalBias = 0.03;
+  }
+  g.add(new THREE.AmbientLight(0xffffff, palette.night ? 0.16 : 0.2));
+  return {
+    group: g,
+    sun,
+    update(camPos) {
+      if (!camPos || !sun.castShadow) return;
+      sun.target.position.set(camPos.x, 0, camPos.z);
+      sun.position.set(camPos.x + 60, 90, camPos.z - 40);
+      sun.target.updateMatrixWorld();
+    },
+  };
 }

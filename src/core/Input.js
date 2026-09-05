@@ -17,7 +17,7 @@ export const KEYMAP_LABELS = [
 ];
 
 function emptyState() {
-  return { steer: 0, accel: 0, brake: 0, drift: false, item: false, itemPressed: false, pause: false, pausePressed: false, any: false };
+  return { steer: 0, accel: 0, brake: 0, drift: false, item: false, itemPressed: false, itemReleased: false, driftPressed: false, pause: false, pausePressed: false, any: false };
 }
 
 class PlayerInput {
@@ -117,6 +117,7 @@ export class InputManager {
       const kd = (codes) => codes.some((c) => this._keys.has(c));
       const edge = (codes) => codes.some((c) => this._edges.has(c));
       let itemEdge = edge(km.item);
+      let driftEdge = edge(km.drift);
       let pauseEdge = p.index === 0 && (this._edges.has('Escape') || this._edges.has('KeyP'));
       if (kd(km.left)) s.steer -= 1;
       if (kd(km.right)) s.steer += 1;
@@ -150,6 +151,10 @@ export class InputManager {
           itemEdge = true;
           t.itemEdge = false;
         }
+        if (t.driftEdge) {
+          driftEdge = true;
+          t.driftEdge = false;
+        }
         if (t.pause) s.pause = true;
       }
       // ジャイロ（プレイヤー1のみ）
@@ -158,8 +163,11 @@ export class InputManager {
 
       s.steer = clamp(s.steer, -1, 1);
       s.itemPressed = (s.item && !p._prevItem) || itemEdge;
+      s.itemReleased = !s.item && p._prevItem; // 押していたボタンを離した瞬間（後ろに構えたアイテムを放す）
+      s.driftPressed = (s.drift && !p._prevDrift) || driftEdge; // ジャンプ中のトリック入力
       s.pausePressed = (s.pause && !p._prevPause) || pauseEdge;
       p._prevItem = s.item;
+      p._prevDrift = s.drift;
       p._prevPause = s.pause;
       if (s.accel > 0) {
         if (p.accelHeldSince < 0) p.accelHeldSince = time;
@@ -190,7 +198,7 @@ export class TouchControls {
     this.container = container;
     this.flip = !!opts.flip;
     this.layout = opts.layout || settings.get('controlLayout') || 'right';
-    this.state = { steer: 0, accel: false, brake: false, drift: false, item: false, itemEdge: false, pause: false };
+    this.state = { steer: 0, accel: false, brake: false, drift: false, item: false, itemEdge: false, driftEdge: false, pause: false };
     this._steerPointer = null;
     this._steerOrigin = 0;
     this._buttonPointers = new Map();
@@ -251,6 +259,7 @@ export class TouchControls {
       const press = (e) => {
         this.state[name] = true;
         if (name === 'item') this.state.itemEdge = true;
+        if (name === 'drift') this.state.driftEdge = true;
         btn.classList.add('pressed');
         this._buttonPointers.set(e.pointerId, name);
         btn.setPointerCapture?.(e.pointerId);

@@ -1,0 +1,80 @@
+# オンライン対戦サーバー（Cloudflare Workers）を公開するワークフロー。
+#
+# Cloudflare のダッシュボードでリポジトリを接続する代わりに、GitHub 側から
+# デプロイする。必要な準備は次の 2 つだけ。
+#
+#   1. Cloudflare で API トークンを作る
+#      https://dash.cloudflare.com/profile/api-tokens
+#      「Create Token」→ テンプレート「Edit Cloudflare Workers」を使う
+#
+#   2. GitHub にトークンを登録する
+#      リポジトリの Settings → Secrets and variables → Actions → New repository secret
+#        名前: CLOUDFLARE_API_TOKEN   値: 1 で作ったトークン
+#        名前: CLOUDFLARE_ACCOUNT_ID  値: Cloudflare のアカウント ID
+#      アカウント ID は Cloudflare のダッシュボードの URL に含まれる 32 桁の英数字
+#      （https://dash.cloudflare.com/<ここがアカウント ID>/...）
+#
+# 登録したら Actions タブからこのワークフローを手動実行できる。
+name: Deploy Worker to Cloudflare
+
+on:
+  push:
+    branches:
+      - main
+      - claude/mario-kart-style-racing-game-mrez08
+    paths:
+      - 'worker/**'
+      - 'server/rooms.js'
+      - 'wrangler.toml'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 準備を確認
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN が未設定です。リポジトリの Settings > Secrets and variables > Actions で登録してください。"
+            echo "::error::トークンは https://dash.cloudflare.com/profile/api-tokens の「Edit Cloudflare Workers」テンプレートで作れます。"
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::warning::CLOUDFLARE_ACCOUNT_ID が未設定です。アカウントが 1 つだけなら自動で選ばれますが、複数ある場合は失敗します。"
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 依存関係をインストール
+        run: npm ci
+
+      - name: 中継サーバーのテスト（部屋・マッチング・順位計算）
+        run: npm test
+
+      - name: Cloudflare へデプロイ
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: 使い方を表示
+        run: |
+          echo "デプロイが完了しました。"
+          echo "上の「Cloudflare へデプロイ」のログに出ている https://mofukart-server.<サブドメイン>.workers.dev を"
+          echo "ゲームの オンライン対戦 → サーバー設定 に貼り付けてください。"
+          echo "末尾に /health を付けて開くと、動いているか確認できます。"
