@@ -157,6 +157,27 @@ test('every character can complete a lap with the AI without hitting walls', () 
   }
 });
 
+test('AI can lap every course without hitting walls', () => {
+  for (const c of COURSES) {
+    const tr = new Track(c);
+    const k = makeKart('taro', 0, {}, tr);
+    const ai = new AIDriver(k, tr, makeRng(5), 'normal');
+    const ctx = { karts: [k], hazards: [], rankOf: () => 1, humanProgress: null };
+    const events = [];
+    let t = 0;
+    let walls = 0;
+    while (k.state.totalProgress < tr.N && t < 120) {
+      ai.update(1 / 60, ctx);
+      stepKart(k, ai.input, 1 / 60, events);
+      walls += events.filter((e) => e.type === 'wall').length;
+      events.length = 0;
+      t += 1 / 60;
+    }
+    assert.ok(k.state.totalProgress >= tr.N, `${c.id}: 1周できなかった`);
+    assert.ok(walls <= 2, `${c.id}: 壁に ${walls} 回ぶつかった`);
+  }
+});
+
 test('character traits map to physics params', () => {
   assert.ok(buildParams(getCharacter('moco')).traits.snow);
   assert.ok(buildParams(getCharacter('pepe')).traits.water);

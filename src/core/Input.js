@@ -193,6 +193,10 @@ export class InputManager {
  * タッチ操作オーバーレイ。ビューポートごとに1つ生成する。
  * 左側: ステアリング（ドラッグ）、右側: アクセル / ドリフト / アイテム ボタン
  */
+// タッチのハンドル: 画面幅に関係なく同じ指の移動量で切れ角が決まるようにする
+const STEER_TRAVEL = 78; // いっぱいまで切るのに必要な指の移動量（CSS px）
+const STEER_DEAD = 7;    // 手ぶれを拾わないための遊び
+
 export class TouchControls {
   constructor(container, opts = {}) {
     this.container = container;
@@ -210,42 +214,72 @@ export class TouchControls {
     root.className = 'touch-controls' + (this.layout === 'left' ? ' layout-left' : '');
     root.innerHTML = `
       <div class="tc-steer">
-        <div class="tc-wheel"><div class="tc-wheel-inner">🏁</div></div>
-        <div class="tc-steer-hint">← ここをドラッグでハンドル →</div>
+        <div class="tc-wheel"><div class="tc-wheel-knob"></div></div>
+        <div class="tc-steer-hint">ここをドラッグでハンドル</div>
       </div>
       <div class="tc-buttons">
         <button class="tc-btn tc-item" data-btn="item"><span>🎁</span><small>アイテム</small></button>
-        <button class="tc-btn tc-drift" data-btn="drift"><span>💨</span><small>ドリフト/ブレーキ</small></button>
+        <button class="tc-btn tc-drift" data-btn="drift"><span>💨</span><small>ドリフト</small></button>
         <button class="tc-btn tc-accel" data-btn="accel"><span>🚀</span><small>アクセル</small></button>
       </div>`;
     this.container.appendChild(root);
     this.root = root;
     this.wheel = root.querySelector('.tc-wheel');
+    this.knob = root.querySelector('.tc-wheel-knob');
     const steerZone = root.querySelector('.tc-steer');
+    this.steerZone = steerZone;
+
+    // 指を置いた場所にハンドルが出てくる（画面のどこを触ったか分かりやすくする）
+    const placeWheel = (x, y) => {
+      const r = steerZone.getBoundingClientRect();
+      const R = (this.wheel.offsetWidth || 104) / 2;
+      // ハンドル領域は画面の下と左（右手アクセルなら左）の端に接しているので、その 2 辺だけ内側に寄せる
+      let wx = x - r.left;
+      let wy = Math.min(y - r.top, r.height - R);
+      wx = this.layout === 'left' ? Math.min(wx, r.width - R) : Math.max(wx, R);
+      this.wheel.style.left = wx + 'px';
+      this.wheel.style.top = wy + 'px';
+    };
+    const setSteer = (s) => {
+      this.state.steer = s;
+      this.wheel.style.transform = `translate(-50%, -50%) rotate(${s * 75}deg)`;
+      this.knob.style.transform = `translate(calc(-50% + ${s * 20}px), -50%)`;
+    };
 
     const onDown = (e) => {
       if (this._steerPointer !== null) return;
       this._steerPointer = e.pointerId;
       this._steerOrigin = e.clientX;
-      this._steerZoneWidth = steerZone.getBoundingClientRect().width || 200;
+      placeWheel(e.clientX, e.clientY);
       steerZone.setPointerCapture?.(e.pointerId);
-      steerZone.classList.add('active');
+      steerZone.classList.add('active', 'used'); // 一度さわったら説明は出しっぱなしにしない
+      setSteer(0);
       e.preventDefault();
     };
     const onMove = (e) => {
       if (e.pointerId !== this._steerPointer) return;
-      const dx = e.clientX - this._steerOrigin;
-      let s = clamp(dx / (this._steerZoneWidth * 0.28), -1, 1);
+      let dx = e.clientX - this._steerOrigin;
+      // 指を大きく動かしたときは中心をついていかせる（持ち替えても操作しつづけられる）
+      const travel = STEER_TRAVEL / (settings.get('steerSensitivity') || 1);
+      if (dx > travel) {
+        this._steerOrigin = e.clientX - travel;
+        dx = travel;
+      } else if (dx < -travel) {
+        this._steerOrigin = e.clientX + travel;
+        dx = -travel;
+      }
+      const mag = Math.max(0, Math.abs(dx) - STEER_DEAD) / Math.max(1, travel - STEER_DEAD);
+      let s = clamp(mag, 0, 1) * Math.sign(dx);
       if (this.flip) s = -s;
-      this.state.steer = s;
-      this.wheel.style.transform = `rotate(${s * 90}deg)`;
+      setSteer(s);
       e.preventDefault();
     };
     const onUp = (e) => {
       if (e.pointerId !== this._steerPointer) return;
       this._steerPointer = null;
-      this.state.steer = 0;
-      this.wheel.style.transform = 'rotate(0deg)';
+      setSteer(0);
+      this.wheel.style.left = '';
+      this.wheel.style.top = '';
       steerZone.classList.remove('active');
     };
     steerZone.addEventListener('pointerdown', onDown);

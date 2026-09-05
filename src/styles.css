@@ -283,39 +283,65 @@ input[type=checkbox] { width: 22px; height: 22px; }
 
 /* ===== タッチ操作 ===== */
 .touch-controls { position: absolute; inset: 0; pointer-events: none; }
-.tc-steer { position: absolute; left: 0; bottom: 0; width: 46%; height: 62%; pointer-events: auto; touch-action: none; }
-.tc-wheel { position: absolute; left: calc(var(--safe-left) + 22px); bottom: calc(var(--safe-bottom) + 26px); width: 96px; height: 96px; border-radius: 50%; border: 6px solid rgba(255,255,255,0.75); background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; font-size: 34px; transition: transform 0.05s; box-shadow: 0 0 0 4px rgba(0,0,0,0.15); }
-.tc-wheel::before { content: ''; position: absolute; top: 4px; left: 50%; width: 8px; height: 22px; margin-left: -4px; background: rgba(255,255,255,0.8); border-radius: 4px; }
-.tc-steer.active .tc-wheel { background: rgba(255,255,255,0.3); }
-.tc-steer-hint { position: absolute; left: calc(var(--safe-left) + 130px); bottom: calc(var(--safe-bottom) + 60px); font-size: 11px; color: rgba(255,255,255,0.7); font-weight: 400; text-shadow: none; }
-.tc-steer.active .tc-steer-hint { display: none; }
-.tc-buttons { position: absolute; right: calc(var(--safe-right) + 14px); bottom: calc(var(--safe-bottom) + 14px); display: grid; grid-template-columns: 70px 100px; grid-template-rows: 62px 100px; gap: 10px; pointer-events: auto; touch-action: none; }
-.tc-btn { border: 4px solid rgba(255,255,255,0.8); border-radius: 50%; background: rgba(0,0,0,0.35); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; font-size: 26px; padding: 0; touch-action: none; user-select: none; box-shadow: 0 4px 0 rgba(0,0,0,0.25); }
-.tc-btn small { font-size: 9px; font-weight: 700; line-height: 1; }
-.tc-btn.pressed { background: rgba(255,255,255,0.45); transform: scale(0.94); box-shadow: none; }
-.tc-item { grid-column: 2; grid-row: 1; border-radius: 22px; font-size: 22px; }
-.tc-drift { grid-column: 1; grid-row: 2; align-self: end; width: 70px; height: 70px; font-size: 22px; background: rgba(76,201,240,0.4); }
-.tc-accel { grid-column: 2; grid-row: 2; width: 100px; height: 100px; background: rgba(255,77,109,0.5); font-size: 34px; }
+/* ハンドル: 左下の広い範囲のどこを触ってもよく、触った場所にホイールが出る */
+.tc-steer { position: absolute; left: 0; bottom: 0; width: 44%; height: 66%; pointer-events: auto; touch-action: none; }
+.tc-wheel { position: absolute; left: calc(var(--safe-left) + 74px); top: auto; bottom: calc(var(--safe-bottom) + 74px);
+  width: 104px; height: 104px; border-radius: 50%; border: 6px solid rgba(255,255,255,0.7);
+  background: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.22), rgba(0,0,0,0.32) 70%);
+  box-shadow: 0 0 0 4px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.3);
+  transform: translate(-50%, -50%); transition: transform 0.06s, opacity 0.15s; opacity: 0.55; pointer-events: none; }
+/* 触っている間は bottom 指定をやめて top で位置を決める */
+.tc-steer.active .tc-wheel { bottom: auto; opacity: 1; border-color: #fff; background: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.4), rgba(0,0,0,0.3) 70%); }
+.tc-wheel-knob { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%;
+  background: rgba(255,255,255,0.9); box-shadow: 0 2px 6px rgba(0,0,0,0.35); transition: transform 0.06s; }
+.tc-steer-hint { position: absolute; left: calc(var(--safe-left) + 16px); bottom: calc(var(--safe-bottom) + 12px);
+  transition: opacity 0.4s; font-size: 11px; color: rgba(255,255,255,0.75); font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+.tc-steer.active .tc-steer-hint, .tc-steer.used .tc-steer-hint { opacity: 0; }
+.hud.short .tc-steer-hint { display: none; }
+
+/* ボタン: 右下。親指の届く弧に沿って アクセル → ドリフト → アイテム と並べる */
+.tc-buttons { position: absolute; right: calc(var(--safe-right) + 16px); bottom: calc(var(--safe-bottom) + 20px);
+  display: grid; grid-template-columns: 82px 116px; grid-template-rows: 82px 116px; gap: 12px;
+  pointer-events: auto; touch-action: none; }
+.tc-btn { border: 4px solid rgba(255,255,255,0.85); border-radius: 50%; background: rgba(0,0,0,0.35); color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 30px; padding: 0;
+  touch-action: none; user-select: none; box-shadow: 0 4px 0 rgba(0,0,0,0.25), 0 6px 14px rgba(0,0,0,0.25); }
+.tc-btn small { font-size: 10px; font-weight: 900; line-height: 1; white-space: nowrap; }
+.tc-btn.pressed { background: rgba(255,255,255,0.5); transform: translateY(3px) scale(0.95); box-shadow: none; }
+.tc-item { grid-column: 2; grid-row: 1; width: 116px; height: 82px; border-radius: 26px; font-size: 26px; background: rgba(255,210,63,0.4); }
+.tc-drift { grid-column: 1; grid-row: 2; align-self: end; width: 82px; height: 82px; font-size: 26px; background: rgba(76,201,240,0.45); }
+.tc-accel { grid-column: 2; grid-row: 2; width: 116px; height: 116px; background: rgba(255,77,109,0.55); font-size: 38px; }
 .touch-controls.layout-left .tc-steer { left: auto; right: 0; }
-.touch-controls.layout-left .tc-wheel { left: auto; right: calc(var(--safe-right) + 22px); }
-.touch-controls.layout-left .tc-steer-hint { left: auto; right: calc(var(--safe-right) + 130px); }
-.touch-controls.layout-left .tc-buttons { right: auto; left: calc(var(--safe-left) + 14px); grid-template-columns: 100px 70px; }
+.touch-controls.layout-left .tc-wheel { left: auto; right: calc(var(--safe-right) + 74px); transform: translate(50%, -50%); }
+.touch-controls.layout-left .tc-steer.active .tc-wheel { right: auto; left: 0; transform: translate(-50%, -50%); }
+.touch-controls.layout-left .tc-steer-hint { left: auto; right: calc(var(--safe-right) + 16px); }
+.touch-controls.layout-left .tc-buttons { right: auto; left: calc(var(--safe-left) + 16px); grid-template-columns: 116px 82px; }
 .touch-controls.layout-left .tc-item { grid-column: 1; }
 .touch-controls.layout-left .tc-drift { grid-column: 2; }
 .touch-controls.layout-left .tc-accel { grid-column: 1; }
-.hud.compact .tc-wheel { width: 64px; height: 64px; font-size: 22px; left: 10px; bottom: 10px; }
-.hud.compact .tc-buttons { grid-template-columns: 48px 66px; grid-template-rows: 42px 66px; gap: 6px; right: 8px; bottom: 8px; }
-.hud.compact .tc-accel { width: 66px; height: 66px; font-size: 24px; }
-.hud.compact .tc-drift { width: 48px; height: 48px; font-size: 16px; }
-.hud.compact .tc-item { font-size: 16px; }
+/* 横持ちや 2 分割など、高さのないビューポート */
+.hud.short .tc-steer { width: 44%; height: 74%; }
+.hud.short .tc-wheel { width: 88px; height: 88px; bottom: calc(var(--safe-bottom) + 58px); }
+.hud.short .tc-buttons { grid-template-columns: 68px 96px; grid-template-rows: 62px 96px; gap: 9px; bottom: calc(var(--safe-bottom) + 14px); }
+.hud.short .tc-accel { width: 96px; height: 96px; font-size: 32px; }
+.hud.short .tc-drift { width: 68px; height: 68px; font-size: 22px; }
+.hud.short .tc-item { width: 96px; height: 62px; font-size: 22px; border-radius: 20px; }
+.hud.compact .tc-wheel { width: 72px; height: 72px; left: 46px; bottom: 46px; border-width: 4px; }
+.hud.compact .tc-wheel-knob { width: 24px; height: 24px; margin: -12px 0 0 -12px; }
+.hud.compact .tc-buttons { grid-template-columns: 54px 74px; grid-template-rows: 46px 74px; gap: 7px; right: 8px; bottom: 8px; }
+.hud.compact .tc-accel { width: 74px; height: 74px; font-size: 26px; }
+.hud.compact .tc-drift { width: 54px; height: 54px; font-size: 18px; }
+.hud.compact .tc-item { width: 74px; height: 46px; font-size: 18px; border-radius: 16px; }
 .hud.compact .tc-btn small, .hud.compact .tc-steer-hint { display: none; }
 
 /* 縦画面: ボタンを大きめに、HUD を詰める */
 @media (orientation: portrait) {
-  .tc-steer { width: 50%; height: 45%; }
-  .tc-buttons { grid-template-columns: 76px 108px; grid-template-rows: 66px 108px; }
-  .tc-accel { width: 108px; height: 108px; }
-  .tc-drift { width: 76px; height: 76px; }
+  .hud:not(.short):not(.compact) .tc-steer { width: 40%; height: 52%; }
+  .hud:not(.short):not(.compact) .tc-buttons { grid-template-columns: 84px 118px; grid-template-rows: 84px 118px; gap: 10px; right: calc(var(--safe-right) + 14px); bottom: calc(var(--safe-bottom) + 30px); }
+  .hud:not(.short):not(.compact) .tc-accel { width: 118px; height: 118px; }
+  .hud:not(.short):not(.compact) .tc-drift { width: 84px; height: 84px; }
+  .hud:not(.short):not(.compact) .tc-item { width: 118px; height: 84px; }
+  .hud:not(.short):not(.compact) .tc-wheel { bottom: calc(var(--safe-bottom) + 96px); }
   .hud-minimap { width: 90px; height: 90px; }
   .hud-pause { top: calc(var(--safe-top) + 104px); }
   .char-layout { flex-direction: column; }
@@ -329,10 +355,6 @@ input[type=checkbox] { width: 22px; height: 22px; }
   .mode-card { min-height: 90px; padding: 10px; }
   .mode-icon { font-size: 28px; }
   .hud-pos-num { font-size: 44px; }
-  .tc-wheel { width: 80px; height: 80px; }
-  .tc-buttons { grid-template-columns: 60px 84px; grid-template-rows: 52px 84px; gap: 8px; }
-  .tc-accel { width: 84px; height: 84px; }
-  .tc-drift { width: 60px; height: 60px; }
 }
 @media (max-width: 480px) {
   .char-grid { grid-template-columns: repeat(4, 1fr); }

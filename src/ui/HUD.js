@@ -8,7 +8,7 @@ export class HUD {
     this.opts = opts;
     this.root = root;
     const el = document.createElement('div');
-    el.className = 'hud' + (opts.flip ? ' flip' : '') + (opts.compact ? ' compact' : '');
+    el.className = 'hud' + (opts.flip ? ' flip' : ''); // compact / short は setRect でビューポート実寸から決める
     el.innerHTML = `
       <div class="hud-label">${opts.label || ''}</div>
       <div class="hud-topleft">
@@ -72,6 +72,13 @@ export class HUD {
     s.top = rect.y * 100 + '%';
     s.width = rect.w * 100 + '%';
     s.height = rect.h * 100 + '%';
+    // 画面分割ではビューポートが小さいので、そのビューポートの実寸でボタンの大きさを決める。
+    // CSS のメディアクエリはウィンドウ全体しか見ないため、ここで判定する
+    const vw = rect.w * (window.innerWidth || 800);
+    const vh = rect.h * (window.innerHeight || 600);
+    const compact = this.opts.compact || vh < 300 || vw < 320;
+    this.el.classList.toggle('compact', compact);
+    this.el.classList.toggle('short', !compact && vh < 460);
   }
 
   _buildMinimapBase(track) {

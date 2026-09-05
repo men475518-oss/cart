@@ -11,6 +11,7 @@
     "server": "node server/index.js",
     "smoke": "node test/smoke.mjs",
     "check:pages": "node test/pages.mjs",
+    "check:touch": "node test/steer.mjs",
     "worker:dev": "wrangler dev --port 8788",
     "worker:deploy": "wrangler deploy",
     "worker:test": "node test/worker.mjs",

@@ -13,7 +13,7 @@ export const COURSES = [
     desc: 'ひろびろした草原コース。おだやかなカーブで走りやすい入門コース',
     difficulty: 1,
     laps: 3,
-    width: 15,
+    width: 18,
     theme: 'meadow',
     bgm: 'meadow',
     points: [
@@ -43,7 +43,7 @@ export const COURSES = [
     desc: 'ヤシの木と青い海。浅瀬をわたる区間はスピードが落ちるので注意（ペペはへっちゃら！）',
     difficulty: 2,
     laps: 3,
-    width: 14,
+    width: 17,
     theme: 'beach',
     bgm: 'beach',
     points: [
@@ -74,7 +74,7 @@ export const COURSES = [
     desc: 'てっぺんまでのぼって、氷のくだり坂をすべりおりる！氷の上はハンドルがききにくい（モコは平気）',
     difficulty: 3,
     laps: 3,
-    width: 14,
+    width: 16.5,
     theme: 'snow',
     bgm: 'snow',
     points: [
@@ -105,7 +105,7 @@ export const COURSES = [
     desc: 'ようがんがふきだす火山コース。ようがんの上にのるとスピン！ヒノだけは平気',
     difficulty: 4,
     laps: 3,
-    width: 12.5,
+    width: 15,
     theme: 'volcano',
     bgm: 'volcano',
     points: [
@@ -140,7 +140,7 @@ export const COURSES = [
     desc: '夜のきらきらした街をかけぬける。直角カーブが多く、ドリフトの腕がためされる',
     difficulty: 3,
     laps: 3,
-    width: 13,
+    width: 15.5,
     theme: 'city',
     bgm: 'city',
     points: [
