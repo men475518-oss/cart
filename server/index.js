@@ -6,18 +6,31 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+// 部屋・マッチングのロジックは Cloudflare Worker 版（worker/index.js）と共有する
+import {
+  CASUAL_MIN,
+  CASUAL_WAIT_MS,
+  COURSE_IDS,
+  MAX_PLAYERS,
+  computeResults,
+  fillWithCpu,
+  generateCode,
+  humanPlayers,
+  makeRoom,
+  mayActAs,
+  resetToLobby,
+  resultDeadlineFor,
+  roomView,
+  sanitizeChar,
+  sanitizeKart,
+  sanitizeLaps,
+  sanitizeName,
+  startRace as applyRaceStart,
+} from './rooms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8787);
 const DIST = path.join(__dirname, '..', 'dist');
-const MAX_PLAYERS = 8;
-const CASUAL_WAIT_MS = 12000;
-const CASUAL_MIN = 2;
-const RESULT_GRACE_MS = 30000;
-const RACE_HARD_LIMIT_MS = 6 * 60 * 1000;
-
-const COURSE_IDS = ['meadow', 'beach', 'snow', 'volcano', 'city'];
-const CHAR_IDS = ['pyon', 'moco', 'taro', 'mint', 'pepe', 'don', 'hino', 'hoo'];
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 
@@ -53,74 +66,29 @@ const rooms = new Map(); // code -> room
 const casualQueue = [];
 let nextId = 1;
 
-function genCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code;
-  do {
-    code = '';
-    for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
-  } while (rooms.has(code));
-  return code;
-}
-
-function sanitizeName(n, fallback) {
-  const s = String(n || '').replace(/[\x00-\x1f<>]/g, '').trim().slice(0, 12);
-  return s || fallback;
-}
-function sanitizeChar(c) {
-  return CHAR_IDS.includes(c) ? c : CHAR_IDS[Math.floor(Math.random() * CHAR_IDS.length)];
-}
-function sanitizeKart(k) {
-  if (!k || typeof k !== 'object') return { color: 'default', wheels: 'standard', accessory: 'none' };
-  return { color: String(k.color || 'default').slice(0, 12), wheels: String(k.wheels || 'standard').slice(0, 12), accessory: String(k.accessory || 'none').slice(0, 12) };
-}
+const genCode = () => generateCode((c) => rooms.has(c));
 
 function send(client, obj) {
   if (client.ws.readyState === 1) client.ws.send(JSON.stringify(obj));
 }
-function broadcast(room, obj, except = null) {
-  const data = JSON.stringify(obj);
-  for (const c of room.members()) if (c !== except && c.ws.readyState === 1) c.ws.send(data);
+/** 部屋にいる接続（プレイヤー + 観戦者） */
+function* membersOf(room) {
+  for (const p of room.players.values()) if (p.client) yield p.client;
+  for (const s of room.spectators) yield s;
 }
 
-function roomView(room) {
-  return {
-    code: room.code,
-    hostId: room.hostId,
-    status: room.status,
-    mode: room.mode,
-    course: room.course,
-    laps: room.laps,
-    players: [...room.players.values()].map((p) => ({ id: p.id, name: p.name, char: p.char, kart: p.kart, ready: p.ready, isHost: p.id === room.hostId, cpu: !!p.cpu })),
-    spectators: room.spectators.size,
-  };
+function broadcast(room, obj, except = null) {
+  const data = JSON.stringify(obj);
+  for (const c of membersOf(room)) if (c !== except && c.ws.readyState === 1) c.ws.send(data);
 }
+
 function pushRoom(room) {
   broadcast(room, { t: 'room', room: roomView(room) });
 }
 
-class Room {
-  constructor(code, mode) {
-    this.code = code;
-    this.mode = mode; // private | casual
-    this.status = 'lobby';
-    this.hostId = null;
-    this.players = new Map(); // id -> player {id,name,char,kart,ready,client,cpu}
-    this.spectators = new Set(); // clients
-    this.course = COURSE_IDS[0];
-    this.laps = 3;
-    this.finish = new Map();
-    this.raceStartedAt = 0;
-    this.resultTimer = null;
-    this.hardTimer = null;
-  }
-  *members() {
-    for (const p of this.players.values()) if (p.client) yield p.client;
-    for (const s of this.spectators) yield s;
-  }
-  humanPlayers() {
-    return [...this.players.values()].filter((p) => !p.cpu);
-  }
+/** 共有の makeRoom に、Node 版だけで使うタイマー欄を足す */
+function newRoom(code, mode) {
+  return Object.assign(makeRoom(code, mode), { resultTimer: null, hardTimer: null });
 }
 
 function joinRoom(client, room, profile) {
@@ -148,11 +116,11 @@ function leaveAll(client) {
         room.players.delete(id);
         broadcast(room, { t: 'left', id });
       }
-      const next = room.humanPlayers()[0];
+      const next = humanPlayers(room)[0];
       room.hostId = next ? next.id : null;
     }
   }
-  if (room.humanPlayers().length === 0) {
+  if (humanPlayers(room).length === 0) {
     clearTimeout(room.resultTimer);
     clearTimeout(room.hardTimer);
     rooms.delete(room.code);
@@ -165,36 +133,15 @@ function leaveAll(client) {
 
 function startRace(room, opts = {}) {
   if (room.status === 'racing') return;
-  room.status = 'racing';
-  room.course = COURSE_IDS.includes(opts.course) ? opts.course : room.course;
-  room.laps = Math.min(5, Math.max(1, Number(opts.laps) || room.laps));
-  room.finish = new Map();
-  room.raceStartedAt = Date.now();
-  // CPU 補充（ホストが実行する）
-  for (const [id, p] of [...room.players]) if (p.cpu) room.players.delete(id);
-  const cpuCount = Math.max(0, Math.min(MAX_PLAYERS - room.humanPlayers().length, opts.cpuCount ?? 0));
-  const usedChars = new Set([...room.players.values()].map((p) => p.char));
-  for (let i = 0; i < cpuCount; i++) {
-    const pool = CHAR_IDS.filter((c) => !usedChars.has(c));
-    const char = pool.length ? pool[Math.floor(Math.random() * pool.length)] : CHAR_IDS[Math.floor(Math.random() * CHAR_IDS.length)];
-    usedChars.add(char);
-    const id = `cpu${i + 1}-${room.code}`;
-    room.players.set(id, { id, name: `CPU ${i + 1}`, char, kart: { color: 'default', wheels: 'standard', accessory: 'none' }, ready: true, client: null, cpu: true });
-  }
-  const seed = Math.floor(Math.random() * 1e9);
-  broadcast(room, { t: 'start', course: room.course, laps: room.laps, seed, hostId: room.hostId, players: roomView(room).players, startAt: Date.now() + 500 });
+  broadcast(room, applyRaceStart(room, opts));
   clearTimeout(room.hardTimer);
-  room.hardTimer = setTimeout(() => finishRace(room), RACE_HARD_LIMIT_MS);
+  room.hardTimer = setTimeout(() => finishRace(room), room.hardDeadline - Date.now());
 }
 
 function checkRaceDone(room) {
-  const racers = [...room.players.values()];
-  const humans = racers.filter((p) => !p.cpu);
-  const allHumansDone = humans.every((p) => room.finish.has(p.id));
-  const allDone = racers.every((p) => room.finish.has(p.id));
-  if (allDone) finishRace(room);
-  else if (allHumansDone && !room.resultTimer) room.resultTimer = setTimeout(() => finishRace(room), 8000);
-  else if (room.finish.size > 0 && !room.resultTimer) room.resultTimer = setTimeout(() => finishRace(room), RESULT_GRACE_MS);
+  const deadline = resultDeadlineFor(room);
+  if (deadline === -1) return finishRace(room);
+  if (deadline > 0 && !room.resultTimer) room.resultTimer = setTimeout(() => finishRace(room), deadline - Date.now());
 }
 
 function finishRace(room) {
@@ -202,21 +149,9 @@ function finishRace(room) {
   clearTimeout(room.resultTimer);
   clearTimeout(room.hardTimer);
   room.resultTimer = null;
-  const racers = [...room.players.values()];
-  const list = racers.map((p) => ({ id: p.id, name: p.name, char: p.char, time: room.finish.get(p.id) ?? null, progress: p.progress || 0 }));
-  list.sort((a, b) => {
-    if (a.time !== null && b.time !== null) return a.time - b.time;
-    if (a.time !== null) return -1;
-    if (b.time !== null) return 1;
-    return b.progress - a.progress;
-  });
-  list.forEach((r, i) => (r.rank = i + 1));
-  room.status = 'lobby';
-  for (const p of room.players.values()) {
-    p.ready = false;
-    p.progress = 0;
-  }
-  broadcast(room, { t: 'results', results: list });
+  const results = computeResults(room);
+  resetToLobby(room);
+  broadcast(room, { t: 'results', results });
   pushRoom(room);
 }
 
@@ -229,11 +164,11 @@ function tickCasual() {
   const waited = Date.now() - oldest;
   if (casualQueue.length >= MAX_PLAYERS || (casualQueue.length >= CASUAL_MIN && waited >= CASUAL_WAIT_MS) || (casualQueue.length >= 1 && waited >= CASUAL_WAIT_MS * 2)) {
     const group = casualQueue.splice(0, MAX_PLAYERS);
-    const room = new Room(genCode(), 'casual');
+    const room = newRoom(genCode(), 'casual');
     rooms.set(room.code, room);
     for (const c of group) joinRoom(c, room, c.profile);
     room.course = COURSE_IDS[Math.floor(Math.random() * COURSE_IDS.length)];
-    setTimeout(() => startRace(room, { course: room.course, cpuCount: MAX_PLAYERS - room.humanPlayers().length }), 1500);
+    setTimeout(() => startRace(room, { course: room.course, cpuCount: MAX_PLAYERS - humanPlayers(room).length }), 1500);
   }
   for (const c of casualQueue) send(c, { t: 'queue', waiting: casualQueue.length, seconds: Math.max(0, Math.ceil((CASUAL_WAIT_MS - (Date.now() - c.queuedAt)) / 1000)) });
   if (casualQueue.length) casualTimer = setTimeout(tickCasual, 1000);
@@ -279,7 +214,7 @@ function handle(client, msg) {
       send(client, { t: 'pong', ts: msg.ts, now: Date.now() });
       break;
     case 'create': {
-      const r = new Room(genCode(), 'private');
+      const r = newRoom(genCode(), 'private');
       rooms.set(r.code, r);
       joinRoom(client, r, profileOf(client, msg));
       break;
@@ -287,7 +222,7 @@ function handle(client, msg) {
     case 'join': {
       const r = rooms.get(String(msg.code || '').toUpperCase());
       if (!r) return send(client, { t: 'error', msg: 'その部屋は見つかりません', code: 'notfound' });
-      if (r.humanPlayers().length >= MAX_PLAYERS) return send(client, { t: 'error', msg: '部屋が満員です', code: 'full' });
+      if (humanPlayers(r).length >= MAX_PLAYERS) return send(client, { t: 'error', msg: '部屋が満員です', code: 'full' });
       if (r.status === 'racing') return send(client, { t: 'error', msg: 'レース中です。観戦モードで参加できます', code: 'racing' });
       joinRoom(client, r, profileOf(client, msg));
       break;
@@ -332,7 +267,7 @@ function handle(client, msg) {
     case 'setCourse': {
       if (!room || room.hostId !== client.id) return;
       if (COURSE_IDS.includes(msg.course)) room.course = msg.course;
-      if (msg.laps) room.laps = Math.min(5, Math.max(1, Number(msg.laps) || 3));
+      if (msg.laps) room.laps = sanitizeLaps(msg.laps, room.laps);
       pushRoom(room);
       break;
     }
@@ -344,10 +279,8 @@ function handle(client, msg) {
     case 'state': {
       if (!room || room.status !== 'racing') return;
       const id = String(msg.id || client.id);
-      const owner = room.players.get(id);
-      if (!owner) return;
-      if (owner.cpu ? room.hostId !== client.id : id !== client.id) return;
-      if (msg.s && typeof msg.s.tp === 'number') owner.progress = msg.s.tp;
+      if (!mayActAs(room, client.id, id)) return;
+      if (msg.s && typeof msg.s.tp === 'number') room.players.get(id).progress = msg.s.tp;
       broadcast(room, { t: 'state', id, s: msg.s }, client);
       break;
     }
@@ -356,8 +289,7 @@ function handle(client, msg) {
       const e = msg.e;
       if (e.k === 'finish') {
         const id = String(e.id || client.id);
-        const owner = room.players.get(id);
-        if (owner && (owner.cpu ? room.hostId === client.id : id === client.id) && !room.finish.has(id)) {
+        if (mayActAs(room, client.id, id) && !room.finish.has(id)) {
           room.finish.set(id, Number(e.time) || (Date.now() - room.raceStartedAt) / 1000);
           checkRaceDone(room);
         }

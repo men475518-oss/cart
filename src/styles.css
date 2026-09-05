@@ -133,6 +133,7 @@ input[type=checkbox] { width: 22px; height: 22px; }
 .server-details { font-size: 13px; }
 .server-details summary { cursor: pointer; color: #556; }
 .server-details label { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.ol-notice { margin: 0; font-size: 13px; line-height: 1.55; background: #fff4d6; border-radius: 12px; padding: 10px 12px; color: #6b5326; }
 .ol-status, .ol-status2 { margin: 0; font-size: 13px; color: #556; min-height: 1.2em; text-align: center; }
 .room-head { display: flex; align-items: center; gap: 10px; }
 .room-code { font-size: 32px; letter-spacing: 0.25em; color: var(--pink); }
