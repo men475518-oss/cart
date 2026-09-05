@@ -23,6 +23,39 @@ npm run server     # オンライン / LAN 対戦用サーバー (ws://localhost
 
 開発モードではクライアントは自動で `ws://<アクセス中のホスト>:8787` に接続します。
 
+## GitHub Pages で公開する
+
+`.github/workflows/deploy.yml` が `npm ci → npm test → npm run build` を実行し、生成された `dist/` を **`gh-pages` ブランチ**へ push します。
+
+初回だけ、GitHub の **Settings → Pages** で次のように設定してください。
+
+| 項目 | 値 |
+| --- | --- |
+| Source | Deploy from a branch |
+| Branch | `gh-pages` |
+| フォルダ | `/ (root)` |
+
+設定後、`main` または開発ブランチへ push（あるいは Actions タブから「Deploy to GitHub Pages」を手動実行）すると、数分で `https://<ユーザー名>.github.io/<リポジトリ名>/` に反映されます。
+
+> **注意**: GitHub Pages はリポジトリのファイルをそのまま配信するだけでビルドを行いません。`gh-pages` 以外（`main` や開発ブランチ）を直接公開すると、`index.html` が読み込む `src/main.js` が未ビルドのため**画面が真っ白になります**。必ず `gh-pages` ブランチを指定してください。
+
+ビルドは相対パス（`base: './'`）で出力されるため、`/リポジトリ名/` のようなサブパスでもそのまま動きます。
+公開前にローカルで同じ条件を確認できます。
+
+```bash
+npm run build
+npm run check:pages   # /cart/ サブパスで配信してヘッドレスブラウザで起動確認
+```
+
+### GitHub Pages でのオンライン対戦について
+
+GitHub Pages は静的ファイル配信のみで WebSocket サーバーを動かせません。そのため公開ページでは次のようになります。
+
+- **そのまま遊べる**: ひとりで遊ぶ / ローカル対戦（画面分割 2〜4 人）/ タイムアタック
+- **サーバーが必要**: オンライン対戦。オンライン画面の「サーバー設定」に別途立てた対戦サーバーのアドレス（例 `wss://your-server.example.com`）を入力すると使えます
+
+対戦サーバーは `npm start` で動く Node アプリなので、Render / Railway / Fly.io などの Node ホスティングに置けます。
+
 ## 本番ビルド & 配信
 
 ```bash
@@ -48,8 +81,9 @@ P2: `WASD` + `Q` ドリフト + `E` アイテム / P3: `IJKL` + `U` `O` / P4: �
 ## テスト
 
 ```bash
-npm test           # ユニットテスト（コース生成・物理・AI・アイテム抽選・対戦サーバー）
+npm test           # ユニットテスト（コース生成・物理・AI・アイテム抽選・対戦サーバー・配信パス）
 npm run smoke      # ブラウザ E2E（要: npx vite preview --port 4173 と npm run server を起動）
+npm run check:pages  # GitHub Pages 相当のサブパス配信で起動確認（要: npm run build）
 ```
 
 `npm run smoke` はヘッドレス Chromium でシングルレース／画面分割（縦・横）／オンライン 2 クライアント同期まで実際に走らせ、`test/screenshots/` にスクリーンショットを保存します。
@@ -76,3 +110,4 @@ test/           ユニットテスト & E2E スモークテスト
 - ブラウザ版のため Bluetooth の直接通信には対応していません。近くの端末同士は同じ Wi-Fi 上でサーバーを 1 台起動して遊んでください（インターネット不要）。
 - キャラクターボイスのセリフは端末の音声合成（Web Speech API）を使うため、端末や OS によって声質が変わります。設定で OFF にできます。
 - ランクマッチ（レーティング）は未実装で、カジュアルマッチのみです。
+- GitHub Pages などの静的ホスティングでは対戦サーバーが同居できないため、オンライン対戦にはサーバーアドレスの入力が必要です（画面に案内を表示します）。

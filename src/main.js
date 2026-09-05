@@ -56,7 +56,9 @@ class App {
 
   _registerSW() {
     if ('serviceWorker' in navigator && import.meta.env && import.meta.env.PROD) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+      // サブパス配信（例: /cart/）でも正しいスコープで登録されるようページ相対で解決する
+      const swUrl = new URL('sw.js', document.baseURI).href;
+      window.addEventListener('load', () => navigator.serviceWorker.register(swUrl).catch(() => {}));
     }
   }
   _fullscreenButton() {

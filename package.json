@@ -10,6 +10,7 @@
     "preview": "vite preview --host",
     "server": "node server/index.js",
     "smoke": "node test/smoke.mjs",
+    "check:pages": "node test/pages.mjs",
     "start": "node server/index.js",
     "test": "node --test test/*.test.js"
   },

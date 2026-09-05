@@ -1,6 +1,20 @@
 // オンライン対戦クライアント（WebSocket）
 import { settings } from '../core/Settings.js';
 
+/**
+ * 静的ホスティング（GitHub Pages など）で配信されているか。
+ * この場合、同じオリジンに対戦サーバーが居ないので接続先を明示してもらう必要がある。
+ */
+export function isStaticHost() {
+  const h = location.hostname;
+  return /(\.github\.io|\.gitlab\.io|\.netlify\.app|\.pages\.dev|\.vercel\.app|\.web\.app|\.firebaseapp\.com|\.surge\.sh)$/.test(h);
+}
+
+/** サーバーアドレスが設定されているか（未設定の静的ホスティングでは false） */
+export function hasServerConfigured() {
+  return !!(settings.get('serverUrl') || '').trim() || !isStaticHost();
+}
+
 export function defaultServerUrl() {
   const custom = (settings.get('serverUrl') || '').trim();
   if (custom) {
