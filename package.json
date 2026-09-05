@@ -1,0 +1,24 @@
+{
+  "name": "mofu-kart",
+  "version": "0.1.0",
+  "description": "もふもふカート - マリオカート風のかわいい3Dカートレースゲーム（スマホ対応 / ローカル＆オンライン対戦）",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "server": "node server/index.js",
+    "smoke": "node test/smoke.mjs",
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "three": "^0.170.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0",
+    "playwright": "^1.49.0"
+  }
+}
