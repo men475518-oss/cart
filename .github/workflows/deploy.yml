@@ -22,10 +22,6 @@ concurrency:
 permissions:
   contents: write
 
-env:
-  # ユニットテストとビルドにブラウザは不要なので、Playwright のダウンロードを省く
-  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest

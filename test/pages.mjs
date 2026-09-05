@@ -4,14 +4,13 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(ROOT, '..', 'dist');
 const PREFIX = process.env.PAGES_PREFIX || '/cart'; // 公開先と同じサブパス
 const PORT = Number(process.env.PAGES_PORT || 4180);
 const OUT = path.join(ROOT, 'screenshots');
-const EXE = process.env.CHROMIUM_PATH || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 
 if (!fs.existsSync(path.join(DIST, 'index.html'))) {
   console.error('dist/ がありません。先に `npm run build` を実行してください。');
@@ -54,10 +53,7 @@ const check = (cond, msg) => {
   if (!cond) failures++;
 };
 
-const browser = await chromium.launch({
-  executablePath: EXE,
-  args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
-});
+const browser = await launchChromium();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 const badRequests = [];

@@ -1,8 +1,8 @@
 // E2E スモークテスト（Playwright + headless Chromium / SwiftShader）
 // 事前に: npx vite preview --port 4173 と node server/index.js を起動
 // 実行:   node test/smoke.mjs
-import { chromium } from 'playwright';
 import fs from 'node:fs';
+import { launchChromium } from './browser.mjs';
 
 const BASE = process.env.SMOKE_URL || 'http://127.0.0.1:4173';
 const OUT = process.env.SMOKE_OUT || 'test/screenshots';
@@ -11,11 +11,9 @@ const GAME_SERVER = process.env.SMOKE_SERVER || '127.0.0.1:8787';
 // SMOKE_ONLY=online のように指定すると、その場面だけ実行する
 const ONLY = process.env.SMOKE_ONLY || '';
 const runs = (name) => !ONLY || ONLY === name;
-const EXE = process.env.CHROMIUM_PATH || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 fs.mkdirSync(OUT, { recursive: true });
 
-const args = ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'];
-const browser = await chromium.launch({ executablePath: EXE, args });
+const browser = await launchChromium(['--autoplay-policy=no-user-gesture-required']);
 let failures = 0;
 const check = (cond, msg) => {
   if (cond) console.log('  ✔', msg);
