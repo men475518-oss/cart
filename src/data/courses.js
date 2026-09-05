@@ -1,0 +1,163 @@
+// コース定義
+// points: 閉じたループの制御点 [x, y(高さ), z]。先頭がスタートライン。最初の区間は +X 方向の直線にする。
+// surfaces: { type, from, to } from/to は制御点インデックス（小数可）。type: ice | water | lava
+// boosts: ダッシュ板 { at, lane(-1..1) }
+// itemBoxes: { at, lanes: [...] }
+export const COURSES = [
+  {
+    id: 'meadow',
+    name: 'そよかぜ草原',
+    emoji: '🌼',
+    desc: 'ひろびろした草原コース。おだやかなカーブで走りやすい入門コース',
+    difficulty: 1,
+    laps: 3,
+    width: 15,
+    theme: 'meadow',
+    bgm: 'meadow',
+    points: [
+      [0, 0, 0], [60, 0, 0], [110, 0, -20], [140, 2, -70], [120, 5, -120], [60, 6, -140],
+      [10, 4, -120], [-20, 2, -80], [-70, 0, -70], [-110, 0, -110], [-150, 0, -70],
+      [-140, 0, -10], [-90, 0, 10], [-40, 0, 0],
+    ],
+    surfaces: [],
+    boosts: [{ at: 4.5, lane: 0 }, { at: 10.5, lane: -0.5 }],
+    itemBoxes: [
+      { at: 1.5, lanes: [-1, 0, 1] },
+      { at: 5.5, lanes: [-1, 0, 1] },
+      { at: 9.0, lanes: [-1, 0, 1] },
+      { at: 12.2, lanes: [-1, 0, 1] },
+    ],
+    palette: {
+      skyTop: 0x62b6ff, skyBottom: 0xcdefff, fog: 0xcdefff, fogNear: 120, fogFar: 420,
+      ground: 0x6cc551, road: 0x8a8f96, roadLine: 0xf2f2f2, curbA: 0xff5252, curbB: 0xffffff,
+      shoulder: 0x5cb44a, wall: 0xdda15e, hemiSky: 0xbfe6ff, hemiGround: 0x5a8f3a, sun: 0xffffff, sunIntensity: 1.6,
+    },
+  },
+  {
+    id: 'beach',
+    name: 'サニービーチ',
+    emoji: '🏖️',
+    desc: 'ヤシの木と青い海。浅瀬をわたる区間はスピードが落ちるので注意（ペペはへっちゃら！）',
+    difficulty: 2,
+    laps: 3,
+    width: 14,
+    theme: 'beach',
+    bgm: 'beach',
+    points: [
+      [0, 0, 0], [70, 0, 0], [130, 0, -30], [150, 0, -90], [110, 0, -130], [50, 0, -110],
+      [0, 0, -150], [-60, 0, -160], [-120, 3, -120], [-150, 6, -60], [-120, 3, -10],
+      [-60, 0, 20], [-20, 0, 10],
+    ],
+    surfaces: [{ type: 'water', from: 4.4, to: 6.3 }],
+    boosts: [{ at: 2.5, lane: 0 }, { at: 9.5, lane: 0.5 }],
+    itemBoxes: [
+      { at: 1.4, lanes: [-1, 0, 1] },
+      { at: 4.0, lanes: [-1, 0, 1] },
+      { at: 7.5, lanes: [-1, 0, 1] },
+      { at: 11.0, lanes: [-1, 0, 1] },
+    ],
+    palette: {
+      skyTop: 0x2f9bff, skyBottom: 0xd8f3ff, fog: 0xd8f3ff, fogNear: 130, fogFar: 450,
+      ground: 0xf3dfa2, road: 0xa89f91, roadLine: 0xfff7e0, curbA: 0xff7f50, curbB: 0xffffff,
+      shoulder: 0xf7e7b5, wall: 0xffffff, hemiSky: 0xcdefff, hemiGround: 0xd9c38a, sun: 0xfff4d6, sunIntensity: 1.8,
+      water: 0x3fb7ff,
+    },
+  },
+  {
+    id: 'snow',
+    name: 'ゆきやまマウンテン',
+    emoji: '⛄',
+    desc: 'てっぺんまでのぼって、氷のくだり坂をすべりおりる！氷の上はハンドルがききにくい（モコは平気）',
+    difficulty: 3,
+    laps: 3,
+    width: 14,
+    theme: 'snow',
+    bgm: 'snow',
+    points: [
+      [0, 0, 0], [60, 0, 0], [110, 4, -30], [130, 10, -90], [100, 14, -140], [40, 16, -150],
+      [-10, 12, -120], [-40, 8, -70], [-90, 4, -60], [-140, 2, -100], [-170, 0, -50],
+      [-130, 0, 0], [-70, 0, 15], [-30, 0, 5],
+    ],
+    surfaces: [{ type: 'ice', from: 5.3, to: 8.2 }, { type: 'ice', from: 10.6, to: 11.4 }],
+    boosts: [{ at: 3.0, lane: 0 }, { at: 12.0, lane: 0 }],
+    itemBoxes: [
+      { at: 1.5, lanes: [-1, 0, 1] },
+      { at: 4.6, lanes: [-1, 0, 1] },
+      { at: 8.8, lanes: [-1, 0, 1] },
+      { at: 11.8, lanes: [-1, 0, 1] },
+    ],
+    palette: {
+      skyTop: 0x6fa8ff, skyBottom: 0xeaf4ff, fog: 0xeaf4ff, fogNear: 90, fogFar: 380,
+      ground: 0xf4f9ff, road: 0xb9c6d6, roadLine: 0xffffff, curbA: 0x4d8bff, curbB: 0xffffff,
+      shoulder: 0xe4eefb, wall: 0xa9d0ff, hemiSky: 0xdbeaff, hemiGround: 0xc0cbdb, sun: 0xffffff, sunIntensity: 1.5,
+      ice: 0xbfe9ff,
+    },
+  },
+  {
+    id: 'volcano',
+    name: 'マグマ火山',
+    emoji: '🌋',
+    desc: 'ようがんがふきだす火山コース。ようがんの上にのるとスピン！ヒノだけは平気',
+    difficulty: 4,
+    laps: 3,
+    width: 12.5,
+    theme: 'volcano',
+    bgm: 'volcano',
+    points: [
+      [0, 0, 0], [50, 0, 0], [90, 2, -25], [80, 4, -70], [120, 6, -100], [130, 10, -150],
+      [80, 12, -170], [30, 10, -140], [-20, 8, -160], [-70, 6, -130], [-60, 4, -80],
+      [-110, 2, -50], [-130, 0, 10], [-80, 0, 25], [-30, 0, 5],
+    ],
+    surfaces: [
+      { type: 'lava', from: 7.2, to: 7.6, lat: [-1, -0.2] },
+      { type: 'lava', from: 8.3, to: 8.7, lat: [0.2, 1] },
+      { type: 'lava', from: 11.2, to: 11.5, lat: [-0.35, 0.35] },
+    ],
+    boosts: [{ at: 4.6, lane: 0 }, { at: 12.7, lane: 0 }],
+    itemBoxes: [
+      { at: 1.3, lanes: [-1, 0, 1] },
+      { at: 5.0, lanes: [-1, 0, 1] },
+      { at: 9.0, lanes: [-1, 0, 1] },
+      { at: 12.2, lanes: [-1, 0, 1] },
+    ],
+    palette: {
+      skyTop: 0x2b0f1a, skyBottom: 0xff7a3d, fog: 0x5a2a20, fogNear: 80, fogFar: 330,
+      ground: 0x3a2a2a, road: 0x4a4646, roadLine: 0xff9f43, curbA: 0xff5722, curbB: 0x222222,
+      shoulder: 0x5b3b34, wall: 0x2f2020, hemiSky: 0xff8c5a, hemiGround: 0x3a1a1a, sun: 0xffb27a, sunIntensity: 1.2,
+      lava: 0xff4e00,
+    },
+  },
+  {
+    id: 'city',
+    name: 'ネオンナイトシティ',
+    emoji: '🌃',
+    desc: '夜のきらきらした街をかけぬける。直角カーブが多く、ドリフトの腕がためされる',
+    difficulty: 3,
+    laps: 3,
+    width: 13,
+    theme: 'city',
+    bgm: 'city',
+    points: [
+      [0, 0, 0], [80, 0, 0], [110, 0, -30], [110, 0, -90], [80, 0, -120], [20, 0, -120],
+      [-10, 0, -150], [-60, 0, -180], [-120, 0, -160], [-140, 0, -100], [-110, 0, -60],
+      [-120, 0, -10], [-80, 0, 10], [-40, 0, 0],
+    ],
+    surfaces: [],
+    boosts: [{ at: 1.2, lane: 0 }, { at: 7.5, lane: 0 }, { at: 12.4, lane: 0 }],
+    itemBoxes: [
+      { at: 2.2, lanes: [-1, 0, 1] },
+      { at: 5.0, lanes: [-1, 0, 1] },
+      { at: 8.5, lanes: [-1, 0, 1] },
+      { at: 11.5, lanes: [-1, 0, 1] },
+    ],
+    palette: {
+      skyTop: 0x05061a, skyBottom: 0x2a1f5e, fog: 0x1a1440, fogNear: 100, fogFar: 380,
+      ground: 0x1b1b2b, road: 0x2e2e3a, roadLine: 0xfff275, curbA: 0xff2e88, curbB: 0x33e1ff,
+      shoulder: 0x23233a, wall: 0x3c3c5c, hemiSky: 0x5a4fcf, hemiGround: 0x101020, sun: 0xb8b8ff, sunIntensity: 0.9,
+      night: true,
+    },
+  },
+];
+
+export const COURSE_BY_ID = Object.fromEntries(COURSES.map((c) => [c.id, c]));
+export const getCourse = (id) => COURSE_BY_ID[id] || COURSES[0];
