@@ -52,9 +52,17 @@ npm run check:pages   # /cart/ サブパスで配信してヘッドレスブラ�
 GitHub Pages は静的ファイル配信のみで WebSocket サーバーを動かせません。そのため公開ページでは次のようになります。
 
 - **そのまま遊べる**: ひとりで遊ぶ / ローカル対戦（画面分割 2〜4 人）/ タイムアタック
-- **サーバーが必要**: オンライン対戦。オンライン画面の「サーバー設定」に別途立てた対戦サーバーのアドレス（例 `wss://your-server.example.com`）を入力すると使えます
+- **サーバーが必要**: オンライン対戦。中継サーバーを別に用意し、オンライン画面の「サーバー設定」にその URL を入力します
 
-対戦サーバーは `npm start` で動く Node アプリなので、Render / Railway / Fly.io などの Node ホスティングに置けます。
+中継サーバーは **Cloudflare Workers の無料プラン**に置けます（無料プランで WebSocket が使えます）。
+
+```bash
+npx wrangler login      # 初回だけ。ブラウザで Cloudflare にログイン
+npm run worker:deploy   # 表示された workers.dev の URL をゲームの「サーバー設定」に入力
+```
+
+手元の PC を一時的に公開する方法や、同じ Wi-Fi 内だけで遊ぶ方法もあります。
+詳しくは [docs/ONLINE_SETUP.md](docs/ONLINE_SETUP.md) を参照してください。
 
 ## 本番ビルド & 配信
 
@@ -81,9 +89,10 @@ P2: `WASD` + `Q` ドリフト + `E` アイテム / P3: `IJKL` + `U` `O` / P4: �
 ## テスト
 
 ```bash
-npm test           # ユニットテスト（コース生成・物理・AI・アイテム抽選・対戦サーバー・配信パス）
-npm run smoke      # ブラウザ E2E（要: npx vite preview --port 4173 と npm run server を起動）
+npm test             # ユニットテスト（コース生成・物理・AI・アイテム抽選・対戦サーバー・配信パス）
+npm run smoke        # ブラウザ E2E（要: npx vite preview --port 4173 と npm run server を起動）
 npm run check:pages  # GitHub Pages 相当のサブパス配信で起動確認（要: npm run build）
+npm run worker:test  # Cloudflare Worker 版サーバーの通信テスト（要: npm run worker:dev）
 ```
 
 `npm run smoke` はヘッドレス Chromium でシングルレース／画面分割（縦・横）／オンライン 2 クライアント同期まで実際に走らせ、`test/screenshots/` にスクリーンショットを保存します。
@@ -97,7 +106,9 @@ src/            クライアント（Vite + Three.js）
   race/         トラック生成・物理・AI・アイテム・演出・レース制御
   ui/           メニュー・HUD・リザルト
   net/          オンライン対戦クライアント
-server/         WebSocket リレーサーバー（部屋 / マッチング / 観戦 / 結果集計）+ 静的配信
+server/         Node 版 WebSocket リレーサーバー + 静的配信
+  rooms.js      部屋・マッチングの共通ロジック（Node 版と Cloudflare 版で共有）
+worker/         Cloudflare Workers + Durable Objects 版リレーサーバー
 docs/           設計ドキュメント
 test/           ユニットテスト & E2E スモークテスト
 ```
@@ -110,4 +121,4 @@ test/           ユニットテスト & E2E スモークテスト
 - ブラウザ版のため Bluetooth の直接通信には対応していません。近くの端末同士は同じ Wi-Fi 上でサーバーを 1 台起動して遊んでください（インターネット不要）。
 - キャラクターボイスのセリフは端末の音声合成（Web Speech API）を使うため、端末や OS によって声質が変わります。設定で OFF にできます。
 - ランクマッチ（レーティング）は未実装で、カジュアルマッチのみです。
-- GitHub Pages などの静的ホスティングでは対戦サーバーが同居できないため、オンライン対戦にはサーバーアドレスの入力が必要です（画面に案内を表示します）。
+- GitHub Pages などの静的ホスティングでは対戦サーバーが同居できないため、オンライン対戦にはサーバーの URL 入力が必要です（画面に案内を表示します）。立てかたは [docs/ONLINE_SETUP.md](docs/ONLINE_SETUP.md) にまとめています。

@@ -329,7 +329,7 @@ export function onlineScreen({ net, profile, onRace, onBack, onEditProfile }) {
         </div>
         <details class="server-details"><summary>サーバー設定（LAN 対戦 / 自前サーバー）</summary>
           <label>サーバーアドレス <input type="text" id="ol-server" placeholder="例: 192.168.1.10:8787（空欄で標準）" value="${esc(settings.get('serverUrl') || '')}"></label>
-          <p class="hint">同じ Wi-Fi の端末同士で遊ぶには、1台で <code>npm run server</code> を起動し、その端末の IP を入力してください。</p>
+          <p class="hint">インターネット越しに遊ぶには、対戦サーバーの URL（例 <code>https://mofukart-server.xxx.workers.dev</code>）を入れてください。<br>同じ Wi-Fi の端末同士なら、1台で <code>npm run server</code> を起動してその端末の IP を入力します（このときゲーム自体も同じ端末の <code>npm run dev</code> から開いてください）。</p>
         </details>
         <p class="ol-status"></p>
       </div>

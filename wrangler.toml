@@ -1,0 +1,22 @@
+# もふもふカート オンライン対戦サーバー（Cloudflare Workers）
+#
+#   npx wrangler login     … 初回だけ。ブラウザで Cloudflare にログインする
+#   npx wrangler deploy    … 公開する。表示された URL をゲームの「サーバー設定」に入れる
+#   npx wrangler dev       … 手元で試す（ws://127.0.0.1:8787）
+
+name = "mofukart-server"
+main = "worker/index.js"
+compatibility_date = "2026-09-01"
+
+# Durable Object が部屋・待機列・WebSocket をまとめて持つ
+[[durable_objects.bindings]]
+name = "RACE_HUB"
+class_name = "RaceHub"
+
+# 無料プランで使えるのは SQLite バックエンドの Durable Object
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RaceHub"]
+
+[observability]
+enabled = true

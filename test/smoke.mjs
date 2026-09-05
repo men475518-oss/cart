@@ -6,6 +6,11 @@ import fs from 'node:fs';
 
 const BASE = process.env.SMOKE_URL || 'http://127.0.0.1:4173';
 const OUT = process.env.SMOKE_OUT || 'test/screenshots';
+// 対戦サーバーの接続先。Cloudflare Worker 版を試すときは 127.0.0.1:8788 を指定する
+const GAME_SERVER = process.env.SMOKE_SERVER || '127.0.0.1:8787';
+// SMOKE_ONLY=online のように指定すると、その場面だけ実行する
+const ONLY = process.env.SMOKE_ONLY || '';
+const runs = (name) => !ONLY || ONLY === name;
 const EXE = process.env.CHROMIUM_PATH || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -53,7 +58,7 @@ async function waitRace(page) {
 }
 
 // ---------- 1. ひとりで遊ぶ（キーボード操作 + HUD） ----------
-{
+if (runs('single')) {
   console.log('■ single race');
   const page = await newPage({}, 'single');
   await toMode(page);
@@ -141,7 +146,7 @@ async function waitRace(page) {
 }
 
 // ---------- 2. ローカル 2 人 画面分割（モバイル縦画面・タッチ） ----------
-{
+if (runs('local')) {
   console.log('■ local split-screen (mobile portrait, touch)');
   const page = await newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 }, 'local');
   await toMode(page);
@@ -175,7 +180,7 @@ async function waitRace(page) {
 }
 
 // ---------- 3. 4 人分割 横画面 + 火山 ----------
-{
+if (runs('local4')) {
   console.log('■ local 4 players landscape');
   const page = await newPage({ viewport: { width: 800, height: 450 } }, 'local4');
   await toMode(page);
@@ -194,11 +199,11 @@ async function waitRace(page) {
 }
 
 // ---------- 4. オンライン: 部屋作成 → 参加 → レース → 状態同期 ----------
-{
+if (runs('online')) {
   console.log('■ online private match');
   const mk = async (name) => {
     const page = await newPage({}, name);
-    await page.addInitScript(() => localStorage.setItem('mofukart.settings.v1', JSON.stringify({ serverUrl: '127.0.0.1:8787', playerName: '' })));
+    await page.addInitScript((SERVER) => localStorage.setItem('mofukart.settings.v1', JSON.stringify({ serverUrl: SERVER, playerName: '' })), GAME_SERVER);
     await toMode(page);
     await page.click('.mode-card[data-mode=online]');
     await page.waitForSelector('.online-screen');
