@@ -10,18 +10,24 @@ export function isStaticHost() {
   return /(\.github\.io|\.gitlab\.io|\.netlify\.app|\.pages\.dev|\.vercel\.app|\.web\.app|\.firebaseapp\.com|\.surge\.sh)$/.test(h);
 }
 
-/** サーバーアドレスが設定されているか（未設定の静的ホスティングでは false） */
+/** ビルド時に組み込まれた対戦サーバー（.env.production の VITE_SERVER_URL） */
+export const BUILT_IN_SERVER_URL = ((import.meta.env && import.meta.env.VITE_SERVER_URL) || '').trim();
+
+function normalizeUrl(u) {
+  if (/^wss?:\/\//.test(u)) return u;
+  if (/^https?:\/\//.test(u)) return u.replace(/^http/, 'ws');
+  return (location.protocol === 'https:' ? 'wss://' : 'ws://') + u;
+}
+
+/** サーバーアドレスが決まっているか（組み込み or 手入力 or 同一オリジンにサーバーがある） */
 export function hasServerConfigured() {
-  return !!(settings.get('serverUrl') || '').trim() || !isStaticHost();
+  return !!(settings.get('serverUrl') || '').trim() || !!BUILT_IN_SERVER_URL || !isStaticHost();
 }
 
 export function defaultServerUrl() {
   const custom = (settings.get('serverUrl') || '').trim();
-  if (custom) {
-    if (/^wss?:\/\//.test(custom)) return custom;
-    if (/^https?:\/\//.test(custom)) return custom.replace(/^http/, 'ws');
-    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + custom;
-  }
+  if (custom) return normalizeUrl(custom);
+  if (BUILT_IN_SERVER_URL) return normalizeUrl(BUILT_IN_SERVER_URL);
   if (import.meta.env && import.meta.env.DEV) return `ws://${location.hostname}:8787`;
   return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
 }

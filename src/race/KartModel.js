@@ -1,11 +1,12 @@
 // カート＆キャラクターの 3D モデル（プリミティブの組み合わせで生成）
 import * as THREE from 'three';
 import { KART_COLORS, KART_WHEELS } from '../data/kartParts.js';
+import { toonMat } from './Materials.js';
 
 const _tmpColor = new THREE.Color();
 
 function mat(color, opts = {}) {
-  return new THREE.MeshLambertMaterial({ color, ...opts });
+  return toonMat(color, opts);
 }
 function sphere(r, color, x = 0, y = 0, z = 0, seg = 12) {
   const m = new THREE.Mesh(new THREE.SphereGeometry(r, seg, Math.max(6, seg - 4)), mat(color));
@@ -451,11 +452,15 @@ export function buildKartModel(char, kartOpts = {}) {
   // アクセサリ
   if (kartOpts.accessory && kartOpts.accessory !== 'none') visual.add(buildAccessory(kartOpts.accessory, accent));
 
-  // 影
+  // 影（接地感を出すブロブ影。ライトの落とす影と併用する）
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(1.4, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.04;
+  shadow.renderOrder = 1;
   group.add(shadow);
+  visual.traverse((o) => {
+    if (o.isMesh) o.castShadow = true;
+  });
 
   // マテリアル一覧（スター演出用）
   const materials = [];
@@ -466,6 +471,7 @@ export function buildKartModel(char, kartOpts = {}) {
 
   let wheelAngle = 0;
   const model = {
+    _squash: 1,
     group,
     visual,
     body,
@@ -491,6 +497,13 @@ export function buildKartModel(char, kartOpts = {}) {
     },
     setSquash(f) {
       visual.scale.setScalar(f);
+      model._squash = f;
+    },
+    /** 着地の一瞬つぶれる演出（0〜0.25 秒の残り時間） */
+    setLandSquash(t) {
+      const f = model._squash ?? 1;
+      const k = Math.max(0, t) / 0.25;
+      visual.scale.set(f * (1 + k * 0.22), f * (1 - k * 0.3), f * (1 + k * 0.22));
     },
     setStar(time) {
       if (time === null) {

@@ -99,6 +99,12 @@ export class AIDriver {
     this.driftHold = Math.max(0, this.driftHold - dt);
 
     inp.steer = steer;
+    // ジャンプ中はトリック（1 回だけドリフトボタンを押す）
+    inp.driftPressed = false;
+    if (s.airborne && !s.tricked && s.hop > 0.6) {
+      inp.driftPressed = true;
+      inp.drift = false;
+    }
     // コーナー速度制限: 先のカーブ半径から曲がり切れる速度を見積もる
     let maxCurv = 0;
     for (let i = 3; i < 24; i++) maxCurv = Math.max(maxCurv, Math.abs(track.sample(s.trackIndex + i).curvature));

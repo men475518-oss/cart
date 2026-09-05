@@ -1,10 +1,14 @@
 // トラック: スプラインからサンプル列・サーフェス・メッシュを生成し、位置クエリを提供する
 import * as THREE from 'three';
 import { clamp } from '../core/Utils.js';
+import { toonMat, asphaltTexture } from './Materials.js';
 
 export const SHOULDER_WIDTH = 7;   // 路肩（減速ゾーン）の幅
 export const WALL_HEIGHT = 1.1;
 const CURB_WIDTH = 0.9;
+const RAMP_HALF = 5;               // ジャンプ台の長さ（サンプル数の半分）
+const RAMP_HEIGHT = 1.6;           // ジャンプ台の高さ
+const COIN_SPACING = 26;           // コインの並びの間隔（サンプル数）
 
 export class Track {
   constructor(def) {
@@ -22,6 +26,8 @@ export class Track {
     this._buildSurfaces();
     this.itemBoxSpots = this._resolveItemBoxes();
     this.boostPads = this._resolveBoosts();
+    this.jumps = this._resolveJumps();
+    this.coinSpots = this._resolveCoins();
   }
 
   /** 制御点インデックス（小数可）→ 弧長パラメータ u(0..1) */
@@ -112,6 +118,61 @@ export class Track {
     return pads;
   }
 
+  /**
+   * ジャンプ台。手前から緩やかに上がって先端で途切れる。
+   * サンプルに lift（そのサンプルでの高さ）と rampEnd（打ち出し地点）を持たせる。
+   */
+  _resolveJumps() {
+    const jumps = [];
+    for (const j of this.def.jumps || []) {
+      const idx = this.cpToIndex(j.at);
+      const halfW = j.lane === undefined ? this.halfWidth : Math.min(4, this.halfWidth * 0.5);
+      const lat = (j.lane || 0) * this.halfWidth * 0.6;
+      for (let k = -RAMP_HALF; k <= 0; k++) {
+        const s = this.samples[(idx + k + this.N) % this.N];
+        const t = (k + RAMP_HALF) / RAMP_HALF; // 0 → 1
+        s.ramp = { lift: t * t * RAMP_HEIGHT, lat, halfW, end: k === 0 };
+      }
+      jumps.push({ index: idx, lateral: lat, halfW });
+    }
+    return jumps;
+  }
+
+  /** コインをコース中央付近に等間隔で並べる（3 枚ずつのシェブロン） */
+  _resolveCoins() {
+    const spots = [];
+    const custom = this.def.coins;
+    const place = (idx, lane) => {
+      const s = this.samples[((idx % this.N) + this.N) % this.N];
+      if (s.ramp || s.boost || s.surface === 'lava') return;
+      const lat = lane * this.halfWidth * 0.45;
+      const p = s.pos.clone().addScaledVector(s.right, lat);
+      p.y += 0.85;
+      spots.push({ pos: p, index: ((idx % this.N) + this.N) % this.N, lateral: lat });
+    };
+    if (custom) {
+      for (const c of custom) {
+        const idx = this.cpToIndex(c.at);
+        for (const lane of c.lanes || [0]) place(idx, lane);
+      }
+      return spots;
+    }
+    // アイテムボックスと重ならないように少しずらして自動配置
+    const boxIdx = new Set(this.itemBoxSpots.map((s) => s.index));
+    for (let i = 0; i < this.N; i += COIN_SPACING) {
+      let near = false;
+      for (const b of boxIdx) {
+        const d = Math.abs(((i - b + this.N * 1.5) % this.N) - this.N / 2);
+        if (Math.abs(this.N / 2 - d) < 8) near = true;
+      }
+      if (near) continue;
+      const group = Math.floor(i / COIN_SPACING) % 3;
+      const lanes = group === 0 ? [-1, 0, 1] : group === 1 ? [-0.6, 0.6] : [0];
+      for (let k = 0; k < 3; k++) for (const lane of lanes) place(i + k * 3, lane);
+    }
+    return spots;
+  }
+
   sample(i) {
     return this.samples[((i % this.N) + this.N) % this.N];
   }
@@ -163,6 +224,13 @@ export class Track {
     if (absLat > this.halfWidth) surface = absLat > this.wallDist ? 'wall' : 'offroad';
     out.surface = surface;
     out.onBoost = !!(s.boost && Math.abs(lateral - s.boost.lat) < s.boost.halfW && absLat <= this.halfWidth);
+    // ジャンプ台
+    out.rampLift = 0;
+    out.rampEnd = false;
+    if (s.ramp && Math.abs(lateral - s.ramp.lat) < s.ramp.halfW) {
+      out.rampLift = s.ramp.lift;
+      out.rampEnd = s.ramp.end;
+    }
     out.curvature = s.curvature;
     return out;
   }
@@ -178,7 +246,7 @@ export class Track {
   }
 
   // ---------- メッシュ生成 ----------
-  buildMesh(palette) {
+  buildMesh(palette, quality = 'high') {
     const group = new THREE.Group();
     const N = this.N;
     const hw = this.halfWidth;
@@ -194,46 +262,75 @@ export class Track {
       lava: new THREE.Color(palette.lava || 0xff4e00),
     };
 
-    // 路面: 1サンプルあたり 6 頂点 [縁石外L, 縁石内L, 中央線L, 中央線R, 縁石内R, 縁石外R]
-    const RV = 6;
+    // 路面の断面。帯ごとに頂点を分けて持つので、縁石や白線の境目がにじまずに出る
+    //  [縁石][白線][路面][センターライン][路面][白線][縁石] の 7 帯 = 14 頂点
+    const LINE_W = 0.34;   // 路肩側の白線の幅
+    const CENTER_W = 0.32; // センターラインの半幅
+    const ci = hw - CURB_WIDTH;            // 縁石の内側
+    const li = ci - LINE_W;                // 白線の内側
+    const bands = [
+      [-hw, -ci, 'curb'],
+      [-ci, -li, 'line'],
+      [-li, -CENTER_W, 'road'],
+      [-CENTER_W, CENTER_W, 'center'],
+      [CENTER_W, li, 'road'],
+      [li, ci, 'line'],
+      [ci, hw, 'curb'],
+    ];
+    const RV = bands.length * 2;
     const pos = new Float32Array(N * RV * 3);
     const col = new Float32Array(N * RV * 3);
-    const lateralOf = [-hw, -hw + CURB_WIDTH, -0.25, 0.25, hw - CURB_WIDTH, hw];
+    const uv = new Float32Array(N * RV * 2);
     for (let i = 0; i < N; i++) {
       const s = this.samples[i];
-      const curb = Math.floor(i / 4) % 2 === 0 ? curbA : curbB;
-      for (let v = 0; v < RV; v++) {
-        const lat = lateralOf[v];
-        const p = s.pos.clone().addScaledVector(s.right, lat);
-        p.y += 0.02;
-        pos.set([p.x, p.y, p.z], (i * RV + v) * 3);
+      const curb = Math.floor(i / 3) % 2 === 0 ? curbA : curbB;
+      const dash = Math.floor(i / 5) % 2 === 0; // センターラインの破線
+      const lift = s.ramp ? s.ramp.lift : 0;
+      for (let b = 0; b < bands.length; b++) {
+        const [l0, l1, kind] = bands[b];
         let c = roadColor;
-        if (v === 0 || v === 1 || v === 4 || v === 5) c = curb;
-        else if (v === 2 || v === 3) c = Math.floor(i / 6) % 2 === 0 ? lineColor : roadColor;
-        if (s.surface !== 'road' && (v === 2 || v === 3)) {
+        if (kind === 'curb') c = curb;
+        else if (kind === 'line') c = lineColor;
+        else if (kind === 'center') c = dash ? lineColor : roadColor;
+        // 氷・水・溶岩の区間は路面部分だけ塗り替える
+        if (s.surface !== 'road' && kind !== 'curb') {
           const sl = s.surfLat;
-          const l = lat / hw;
-          if (!sl || (l >= sl[0] && l <= sl[1])) c = surfColors[s.surface] || roadColor;
+          const mid = (l0 + l1) / 2 / hw;
+          if (!sl || (mid >= sl[0] && mid <= sl[1])) c = surfColors[s.surface] || c;
         }
-        col.set([c.r, c.g, c.b], (i * RV + v) * 3);
+        for (let e = 0; e < 2; e++) {
+          const lat = e === 0 ? l0 : l1;
+          const vi = i * RV + b * 2 + e;
+          const onRamp = s.ramp && Math.abs(lat - s.ramp.lat) < s.ramp.halfW;
+          const p = s.pos.clone().addScaledVector(s.right, lat);
+          p.y += 0.02 + (onRamp ? lift : 0);
+          pos.set([p.x, p.y, p.z], vi * 3);
+          uv.set([lat * 0.25, i * 0.35], vi * 2);
+          col.set([c.r, c.g, c.b], vi * 3);
+        }
       }
     }
     const idx = [];
     for (let i = 0; i < N; i++) {
       const a = i * RV;
-      const b = ((i + 1) % N) * RV;
-      for (let v = 0; v < RV - 1; v++) {
-        idx.push(a + v, b + v, a + v + 1, a + v + 1, b + v, b + v + 1);
+      const bn = ((i + 1) % N) * RV;
+      for (let b = 0; b < bands.length; b++) {
+        const v = b * 2;
+        // 反時計回り（上から見て表）になる順に並べる。逆にすると路面が裏面になり、
+        // 上からは背面カリングで消えてしまう
+        idx.push(a + v, a + v + 1, bn + v, a + v + 1, bn + v + 1, bn + v);
       }
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const roadMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const roadMat = toonMat(0xffffff, { vertexColors: true, map: quality === 'low' ? null : asphaltTexture(1) });
     const road = new THREE.Mesh(geo, roadMat);
     road.name = 'road';
+    road.receiveShadow = true;
     group.add(road);
 
     // 特殊サーフェス（水・氷・溶岩）は路面全体を覆うオーバーレイで描く（lat 指定がある場合はその範囲）
@@ -242,6 +339,7 @@ export class Track {
       const s = this.samples[i];
       if (s.surface !== 'road' && overlays[s.surface]) overlays[s.surface].push(i);
     }
+    this.surfaceMeshes = [];
     for (const type of Object.keys(overlays)) {
       const list = overlays[type];
       if (!list.length) continue;
@@ -276,15 +374,17 @@ export class Track {
       const m = new THREE.Mesh(og, mat);
       m.name = `surface-${type}`;
       m.userData.surfaceType = type;
+      m.userData.baseY = 0;
       group.add(m);
+      this.surfaceMeshes.push(m);
     }
 
     // 路肩（左右）＋ 壁 ＋ スカート
-    const SV = 4; // [壁上L, 路肩外L(壁下), 路肩外R, 壁上R] を分けて作る
     const shPos = [];
     const shCol = [];
     const shIdx = [];
     const wallPos = [];
+    const wallCol = [];
     const wallIdx = [];
     const skirtPos = [];
     const skirtIdx = [];
@@ -292,6 +392,8 @@ export class Track {
     let wv = 0;
     let kv = 0;
     const groundY = this.minY - 0.3;
+    const wallColor = new THREE.Color(palette.wall);
+    const wallColor2 = new THREE.Color(palette.wall).lerp(new THREE.Color(0xffffff), 0.35);
     for (let i = 0; i < N; i++) {
       const s = this.samples[i];
       const s2 = this.samples[(i + 1) % N];
@@ -306,10 +408,12 @@ export class Track {
         if (side < 0) shIdx.push(sv, sv + 1, sv + 2, sv + 1, sv + 3, sv + 2);
         else shIdx.push(sv, sv + 2, sv + 1, sv + 1, sv + 2, sv + 3);
         sv += 4;
-        // 壁
+        // 壁（上下で色を変えて厚みを出す）
+        const stripe = Math.floor(i / 5) % 2 === 0 ? wallColor : wallColor2;
         for (const ss of [s, s2]) {
           const b = ss.pos.clone().addScaledVector(ss.right, side * wd);
           wallPos.push(b.x, b.y, b.z, b.x, b.y + WALL_HEIGHT, b.z);
+          wallCol.push(stripe.r * 0.7, stripe.g * 0.7, stripe.b * 0.7, stripe.r, stripe.g, stripe.b);
         }
         if (side < 0) wallIdx.push(wv, wv + 2, wv + 1, wv + 1, wv + 2, wv + 3);
         else wallIdx.push(wv, wv + 1, wv + 2, wv + 1, wv + 3, wv + 2);
@@ -330,15 +434,17 @@ export class Track {
     shGeo.setAttribute('color', new THREE.Float32BufferAttribute(shCol, 3));
     shGeo.setIndex(shIdx);
     shGeo.computeVertexNormals();
-    const shoulder = new THREE.Mesh(shGeo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+    const shoulder = new THREE.Mesh(shGeo, toonMat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }));
     shoulder.name = 'shoulder';
+    shoulder.receiveShadow = true;
     group.add(shoulder);
 
     const wallGeo = new THREE.BufferGeometry();
     wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(wallPos, 3));
+    wallGeo.setAttribute('color', new THREE.Float32BufferAttribute(wallCol, 3));
     wallGeo.setIndex(wallIdx);
     wallGeo.computeVertexNormals();
-    const wall = new THREE.Mesh(wallGeo, new THREE.MeshLambertMaterial({ color: palette.wall, side: THREE.DoubleSide }));
+    const wall = new THREE.Mesh(wallGeo, toonMat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }));
     wall.name = 'wall';
     group.add(wall);
 
@@ -346,23 +452,65 @@ export class Track {
     skirtGeo.setAttribute('position', new THREE.Float32BufferAttribute(skirtPos, 3));
     skirtGeo.setIndex(skirtIdx);
     skirtGeo.computeVertexNormals();
-    const skirt = new THREE.Mesh(skirtGeo, new THREE.MeshLambertMaterial({ color: palette.ground, side: THREE.DoubleSide }));
+    const skirt = new THREE.Mesh(skirtGeo, toonMat(palette.ground, { side: THREE.DoubleSide }));
     skirt.name = 'skirt';
     group.add(skirt);
 
+    // ガードレール（壁の上に等間隔の支柱とレール）
+    if (quality !== 'low') {
+      const step = 8;
+      // ループは ceil(N / step) 回まわるので、切り上げでインスタンスを確保する。
+      // 足りないと余ったインスタンスの行列がゼロのまま描かれ、空に巨大な三角形が出る
+      const count = Math.ceil(N / step) * 2;
+      const postGeo = new THREE.CylinderGeometry(0.12, 0.14, 1.1, 6);
+      const posts = new THREE.InstancedMesh(postGeo, toonMat(0xdfe4ea), count);
+      posts.frustumCulled = false;
+      const railGeo = new THREE.BoxGeometry(0.18, 0.32, 1);
+      const rails = new THREE.InstancedMesh(railGeo, toonMat(palette.curbA), count);
+      rails.frustumCulled = false;
+      const m4 = new THREE.Matrix4();
+      const qt = new THREE.Quaternion();
+      const up = new THREE.Vector3(0, 1, 0);
+      let pi = 0;
+      for (let i = 0; i < N; i += step) {
+        const s = this.samples[i];
+        const s2 = this.samples[(i + step) % N];
+        for (const side of [-1, 1]) {
+          const b = s.pos.clone().addScaledVector(s.right, side * wd);
+          m4.compose(new THREE.Vector3(b.x, b.y + WALL_HEIGHT + 0.5, b.z), qt.setFromAxisAngle(up, s.heading), new THREE.Vector3(1, 1, 1));
+          posts.setMatrixAt(pi, m4);
+          const b2 = s2.pos.clone().addScaledVector(s2.right, side * wd);
+          const mid = b.clone().lerp(b2, 0.5);
+          const len = b.distanceTo(b2);
+          m4.compose(
+            new THREE.Vector3(mid.x, mid.y + WALL_HEIGHT + 0.85, mid.z),
+            qt.setFromAxisAngle(up, Math.atan2(b2.x - b.x, b2.z - b.z)),
+            new THREE.Vector3(1, 1, len)
+          );
+          rails.setMatrixAt(pi, m4);
+          pi++;
+        }
+      }
+      posts.count = pi;
+      rails.count = pi;
+      posts.instanceMatrix.needsUpdate = true;
+      rails.instanceMatrix.needsUpdate = true;
+      group.add(posts, rails);
+    }
+
     // スタートライン（市松模様）
     const s0 = this.samples[0];
-    const cells = 8;
+    const cells = 10;
     const cellW = this.width / cells;
-    const cellL = 1.2;
+    const cellL = 1.1;
     const startGroup = new THREE.Group();
-    for (let r = 0; r < 2; r++) {
+    for (let r = 0; r < 3; r++) {
       for (let c = 0; c < cells; c++) {
         const g = new THREE.PlaneGeometry(cellW, cellL);
-        const m = new THREE.MeshBasicMaterial({ color: (r + c) % 2 === 0 ? 0xffffff : 0x111111 });
+        const m = new THREE.MeshBasicMaterial({ color: (r + c) % 2 === 0 ? 0xffffff : 0x1a1a1a });
         const mesh = new THREE.Mesh(g, m);
         const lat = -hw + cellW * (c + 0.5);
-        const p = s0.pos.clone().addScaledVector(s0.right, lat).addScaledVector(s0.tan, (r - 0.5) * cellL);
+        const p = s0.pos.clone().addScaledVector(s0.right, lat).addScaledVector(s0.tan, (r - 1) * cellL);
         mesh.position.set(p.x, p.y + 0.06, p.z);
         mesh.rotation.x = -Math.PI / 2;
         mesh.rotation.z = -s0.heading;
@@ -371,7 +519,32 @@ export class Track {
     }
     group.add(startGroup);
 
+    // ジャンプ台の見た目（縁のライン＋矢印）
+    for (const j of this.jumps) {
+      const s = this.samples[j.index];
+      const lip = new THREE.Mesh(
+        new THREE.BoxGeometry(j.halfW * 2, 0.22, 0.6),
+        new THREE.MeshBasicMaterial({ color: 0xffd23f })
+      );
+      const p = s.pos.clone().addScaledVector(s.right, j.lateral);
+      lip.position.set(p.x, p.y + RAMP_HEIGHT + 0.1, p.z);
+      lip.rotation.y = s.heading;
+      group.add(lip);
+      for (let k = 1; k <= 3; k++) {
+        const s2 = this.samples[(j.index - k * 2 + N) % N];
+        const chevron = new THREE.Mesh(
+          new THREE.PlaneGeometry(j.halfW * 1.2, 0.9),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })
+        );
+        const cp = s2.pos.clone().addScaledVector(s2.right, j.lateral);
+        chevron.position.set(cp.x, cp.y + (s2.ramp ? s2.ramp.lift : 0) + 0.12, cp.z);
+        chevron.rotation.set(-Math.PI / 2, 0, -s2.heading);
+        group.add(chevron);
+      }
+    }
+
     // ダッシュ板
+    this.boostPadMeshes = [];
     for (const pad of this.boostPads) {
       const s = this.samples[pad.index];
       const g = new THREE.PlaneGeometry(pad.halfW * 2, pad.len);
@@ -383,18 +556,16 @@ export class Track {
       mesh.rotation.z = -s.heading;
       mesh.userData.boostPad = true;
       group.add(mesh);
+      this.boostPadMeshes.push(mesh);
       // 矢印（3本の三角）
       for (let k = -1; k <= 1; k++) {
         const ag = new THREE.ConeGeometry(pad.halfW * 0.5, 1.4, 3);
         const am = new THREE.MeshBasicMaterial({ color: 0xffffff });
         const arrow = new THREE.Mesh(ag, am);
-        arrow.rotation.x = Math.PI / 2;
-        arrow.rotation.z = 0;
         const ap = p.clone().addScaledVector(s.tan, k * 1.5);
         arrow.position.set(ap.x, ap.y + 0.1, ap.z);
         arrow.rotation.set(-Math.PI / 2, 0, -s.heading + Math.PI);
         arrow.scale.y = 0.6;
-        arrow.rotateX(0);
         arrow.userData.boostArrow = true;
         group.add(arrow);
       }

@@ -8,6 +8,13 @@ export const DRIFT_TIERS = [
   { time: 3.2, boost: 1.45, sfx: 'drift3', color: 0xc86bff },
 ];
 
+export const MAX_COINS = 10;
+export const COIN_SPEED_BONUS = 0.008; // コイン 1 枚あたり最高速 +0.8%（10 枚で +8%）
+export const COINS_LOST_ON_HIT = 3;
+
+const AIR_GRAVITY = 26;
+const HOP_GRAVITY = 22;
+
 /** キャラクター＋パーツから物理パラメータを作る */
 export function buildParams(char, kartOpts = {}) {
   const s = char.stats;
@@ -41,8 +48,11 @@ export function createKartState() {
     heading: 0,       // 向き
     moveHeading: 0,   // 実際の移動方向（グリップに応じて heading に追従）
     speed: 0,
-    vy: 0,            // 垂直速度（ジャンプ用）
-    hop: 0,
+    vy: 0,            // 垂直速度（ホップ / ジャンプ用）
+    hop: 0,           // 路面からの高さ
+    airborne: false,  // ジャンプ台から飛んでいる
+    tricked: false,   // 空中でトリックを決めた
+    airTime: 0,
     drifting: false, driftDir: 0, driftCharge: 0, driftTier: -1,
     boostTime: 0, boostPower: 1,
     spinTime: 0, spinAngle: 0,
@@ -58,6 +68,8 @@ export function createKartState() {
     goldenTime: 0,
     invincibleFlash: 0,
     reverseHint: 0,
+    coins: 0,
+    landSquash: 0,    // 着地のつぶれ演出
   };
 }
 
@@ -66,9 +78,9 @@ const _q = {};
 /**
  * 1ステップ物理更新
  * @param k  kart オブジェクト { state, params, track }
- * @param input { steer, accel, brake, drift }
+ * @param input { steer, accel, brake, drift, driftPressed }
  * @param dt  秒
- * @param events  イベント配列（'driftTier', 'boost', 'lava', 'wall', 'water'...）を push する
+ * @param events  イベント配列（'driftTier', 'boost', 'lava', 'wall', 'water', 'jump', 'trick', 'land'...）を push する
  */
 export function stepKart(k, input, dt, events, nightBonus = false) {
   const s = k.state;
@@ -84,12 +96,13 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
   dec('stunTime');
   dec('lavaCooldown');
   dec('goldenTime');
+  dec('landSquash');
 
   const controllable = s.spinTime <= 0 && s.stunTime <= 0 && !s.finished;
   const steer = controllable ? input.steer : 0;
   const accel = controllable ? input.accel : s.finished ? 1 : 0;
   const brakeIn = controllable ? input.brake : 0;
-  const driftBtn = controllable && input.drift;
+  const driftBtn = controllable && input.drift && !s.airborne;
 
   // サーフェス
   const q = track.query({ x: s.x, y: s.y, z: s.z }, s.trackIndex, _q);
@@ -97,7 +110,9 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
   s.surface = surf;
   let surfMult = 1;
   let grip = 9;
-  if (surf === 'offroad') {
+  if (s.airborne) {
+    // 空中では路面の影響を受けない
+  } else if (surf === 'offroad') {
     surfMult = s.starTime > 0 || s.boostTime > 0 ? 0.85 : p.offroadMult;
   } else if (surf === 'ice') {
     if (!p.traits.snow) grip = 2.2;
@@ -115,20 +130,49 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
   s.lastSurface = surf;
 
   // ダッシュ板
-  if (q.onBoost && !s.onBoost) {
+  if (q.onBoost && !s.onBoost && !s.airborne) {
     applyBoost(k, 0.9, 1.35);
     events.push({ type: 'boostpad', kart: k });
   }
   s.onBoost = q.onBoost;
 
-  // 速度目標
+  // ジャンプ台: 坂を登っている間は路面から浮かせ、先端で打ち出す
+  let onRamp = false;
+  if (!s.airborne && q.rampLift > 0) {
+    onRamp = true;
+    s.hop = q.rampLift;
+    s.vy = 0;
+    if (q.rampEnd && Math.abs(s.speed) > 6) {
+      s.airborne = true;
+      s.tricked = false;
+      s.airTime = 0;
+      s.vy = clamp(4 + s.speed * 0.14, 5, 12);
+      if (s.drifting) {
+        s.drifting = false;
+        s.driftCharge = 0;
+        s.driftTier = -1;
+      }
+      onRamp = false;
+      events.push({ type: 'jump', kart: k });
+    }
+  }
+  // 空中トリック
+  if (s.airborne) {
+    s.airTime += dt;
+    if (controllable && input.driftPressed && !s.tricked && s.airTime > 0.05) {
+      s.tricked = true;
+      events.push({ type: 'trick', kart: k });
+    }
+  }
+
+  // 速度目標（コインで少し速くなる）
   const squash = s.squashTime > 0 ? 0.65 : 1;
   const star = s.starTime > 0 ? 1.25 : 1;
-  let target = p.maxSpeed * surfMult * squash * star;
+  let target = p.maxSpeed * surfMult * squash * star * (1 + COIN_SPEED_BONUS * (s.coins || 0));
   if (s.boostTime > 0) target *= s.boostPower;
 
   // ドリフト
-  const canDrift = Math.abs(s.speed) > p.maxSpeed * 0.45 && controllable;
+  const canDrift = Math.abs(s.speed) > p.maxSpeed * 0.45 && controllable && !s.airborne && !onRamp;
   if (!s.drifting && driftBtn && canDrift && Math.abs(steer) > 0.25) {
     s.drifting = true;
     s.driftDir = Math.sign(steer);
@@ -161,18 +205,18 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
   }
 
   // 加減速
-  const braking = brakeIn > 0 || (driftBtn && !s.drifting && Math.abs(steer) < 0.25);
+  const braking = !s.airborne && (brakeIn > 0 || (driftBtn && !s.drifting && Math.abs(steer) < 0.25));
   if (s.speed < target && accel > 0 && !braking) {
-    const rate = p.accel * (s.boostTime > 0 ? 2.2 : 1) * (1 - (s.speed / target) * 0.4);
+    const rate = p.accel * (s.boostTime > 0 ? 2.2 : 1) * (1 - (s.speed / target) * 0.4) * (s.airborne ? 0.3 : 1);
     s.speed = Math.min(target, s.speed + rate * accel * dt);
   } else if (s.speed > target) {
-    s.speed = Math.max(target, s.speed - (surf === 'offroad' ? 45 : 18) * dt);
+    s.speed = Math.max(target, s.speed - (surf === 'offroad' && !s.airborne ? 45 : 18) * dt);
   }
   if (braking) {
     if (s.speed > 0) s.speed = Math.max(0, s.speed - 34 * dt);
     else if (accel === 0 && !s.drifting) s.speed = Math.max(-9, s.speed - 10 * dt);
   } else if (accel === 0 && s.speed > 0) {
-    s.speed = Math.max(0, s.speed - 9 * dt);
+    s.speed = Math.max(0, s.speed - (s.airborne ? 2 : 9) * dt);
   } else if (accel === 0 && s.speed < 0) {
     s.speed = Math.min(0, s.speed + 12 * dt);
   }
@@ -180,7 +224,7 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
 
   // ステアリング
   const speedNorm = clamp(Math.abs(s.speed) / p.maxSpeed, 0, 1);
-  const steerAuthority = clamp(Math.abs(s.speed) / 6, 0, 1) * (1 - speedNorm * 0.35);
+  const steerAuthority = clamp(Math.abs(s.speed) / 6, 0, 1) * (1 - speedNorm * 0.35) * (s.airborne ? 0.3 : 1);
   let turn;
   if (s.drifting) {
     // 内側に切るほど鋭く、外側に切ればゆるく（ほぼ直進まで）曲がる
@@ -205,11 +249,20 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
   s.knockVx *= Math.exp(-4 * dt);
   s.knockVz *= Math.exp(-4 * dt);
 
-  // ホップ / ジャンプ
-  if (s.hop > 0 || s.vy > 0) {
-    s.vy -= 22 * dt;
+  // ホップ / ジャンプ（ジャンプ台の坂の上では高さを固定）
+  if (!onRamp && (s.hop > 0 || s.vy > 0)) {
+    s.vy -= (s.airborne ? AIR_GRAVITY : HOP_GRAVITY) * dt;
     s.hop = Math.max(0, s.hop + s.vy * dt);
-    if (s.hop === 0) s.vy = 0;
+    if (s.hop === 0) {
+      s.vy = 0;
+      if (s.airborne) {
+        s.airborne = false;
+        s.landSquash = 0.25;
+        if (s.tricked) applyBoost(k, 0.75 * p.boostDurMult, 1.35);
+        events.push({ type: 'land', kart: k, trick: s.tricked, airTime: s.airTime });
+        s.tricked = false;
+      }
+    }
   }
 
   // トラック拘束（壁）
@@ -228,7 +281,7 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
       events.push({ type: 'wall', kart: k, impact });
       s.speed *= 0.55;
     } else s.speed *= 0.985;
-    s.heading = dampAngle(s.heading, wallHeading + (rel > 0 ? 0.15 : -0.15) * 0, 6, dt);
+    s.heading = dampAngle(s.heading, wallHeading, 6, dt);
     s.moveHeading = s.heading;
     q2.lateral = sign * wallDist;
   }
@@ -260,6 +313,14 @@ export function applyBoost(k, duration, power = 1.35) {
   if (s.speed < k.params.maxSpeed * 0.7) s.speed = Math.max(s.speed, k.params.maxSpeed * 0.7);
 }
 
+/** 被弾でコインを落とす。落とした枚数を返す */
+export function dropCoins(k, n = COINS_LOST_ON_HIT) {
+  const s = k.state;
+  const lost = Math.min(s.coins || 0, n);
+  s.coins = (s.coins || 0) - lost;
+  return lost;
+}
+
 /** 被弾: スピン */
 export function spinOut(k, strength = 1) {
   const s = k.state;
@@ -270,6 +331,7 @@ export function spinOut(k, strength = 1) {
   s.driftCharge = 0;
   s.driftTier = -1;
   s.boostTime = 0;
+  s.coinsLost = dropCoins(k);
   return true;
 }
 
@@ -292,6 +354,7 @@ export function knockBack(k, fromX, fromZ, power = 1) {
   s.speed *= 0.2;
   s.drifting = false;
   s.boostTime = 0;
+  s.coinsLost = dropCoins(k);
   return true;
 }
 
@@ -304,6 +367,8 @@ export function resolveKartCollision(a, b, events) {
   const dist = Math.hypot(dx, dz);
   const minDist = 2.3;
   if (dist >= minDist || dist === 0) return;
+  // 高さが大きく違う（片方がジャンプ中）ならぶつからない
+  if (Math.abs((sa.hop || 0) - (sb.hop || 0)) > 1.6) return;
   const nx = dx / dist;
   const nz = dz / dist;
   const overlap = minDist - dist;

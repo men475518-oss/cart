@@ -79,15 +79,34 @@ await page.click('.course-card[data-id="meadow"]');
 await page.waitForSelector('.hud', { timeout: 90000 });
 await page.keyboard.down('ArrowUp');
 await page.waitForFunction(() => window.__app?.race?.state === 'racing', null, { timeout: 180000 });
-await page.waitForFunction(() => window.__app.race.time > 5, null, { timeout: 180000 });
-const st = await page.evaluate(() => {
+// アクセルを押しっぱなしにするだけなのでコースアウトして壁にぶつかることもある。
+// 一瞬の速度ではなく「ちゃんと加速して前に進んだか」で判定する
+await page.evaluate(() => {
   const r = window.__app.race;
   const k = r.karts.find((x) => x.isHuman);
-  return { karts: r.karts.length, speed: +k.state.speed.toFixed(1) };
+  window.__peak = { speed: 0, progress: 0 };
+  window.__peakTimer = setInterval(() => {
+    window.__peak.speed = Math.max(window.__peak.speed, k.state.speed);
+    window.__peak.progress = Math.max(window.__peak.progress, k.state.progress || 0);
+  }, 100);
+});
+await page.waitForFunction(() => window.__app.race.time > 5, null, { timeout: 180000 });
+const st = await page.evaluate(() => {
+  clearInterval(window.__peakTimer);
+  const r = window.__app.race;
+  const k = r.karts.find((x) => x.isHuman);
+  return {
+    karts: r.karts.length,
+    speed: +Math.max(window.__peak.speed, k.state.speed).toFixed(1),
+    progress: Math.round(Math.max(window.__peak.progress, k.state.progress || 0)),
+  };
 });
 await page.keyboard.up('ArrowUp');
 await page.screenshot({ path: path.join(OUT, '21-pages-race.png') });
-check(st.karts === 8 && st.speed > 20, `サブパス配信でレースが動く（速度 ${st.speed}）`);
+check(
+  st.karts === 8 && st.speed > 20 && st.progress > 40,
+  `サブパス配信でレースが動く（最高速度 ${st.speed} / 進行 ${st.progress}）`
+);
 
 const scopes = await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope));
 check(scopes.some((s) => s.endsWith(PREFIX + '/')), `Service Worker のスコープが ${PREFIX}/ になる（${scopes.join(',') || 'なし'}）`);

@@ -3,6 +3,8 @@
 // surfaces: { type, from, to } from/to は制御点インデックス（小数可）。type: ice | water | lava
 // boosts: ダッシュ板 { at, lane(-1..1) }
 // itemBoxes: { at, lanes: [...] }
+// jumps: ジャンプ台 { at, lane? } lane を省略すると道幅いっぱい。空中でドリフトボタンを押すとトリック → 着地ブースト
+// coins: 省略するとコースに沿って自動配置
 export const COURSES = [
   {
     id: 'meadow',
@@ -27,6 +29,7 @@ export const COURSES = [
       { at: 9.0, lanes: [-1, 0, 1] },
       { at: 12.2, lanes: [-1, 0, 1] },
     ],
+    jumps: [{ at: 8.7 }, { at: 12.5 }],
     palette: {
       skyTop: 0x62b6ff, skyBottom: 0xcdefff, fog: 0xcdefff, fogNear: 120, fogFar: 420,
       ground: 0x6cc551, road: 0x8a8f96, roadLine: 0xf2f2f2, curbA: 0xff5252, curbB: 0xffffff,
@@ -56,6 +59,7 @@ export const COURSES = [
       { at: 7.5, lanes: [-1, 0, 1] },
       { at: 11.0, lanes: [-1, 0, 1] },
     ],
+    jumps: [{ at: 2.6 }, { at: 9.6 }],
     palette: {
       skyTop: 0x2f9bff, skyBottom: 0xd8f3ff, fog: 0xd8f3ff, fogNear: 130, fogFar: 450,
       ground: 0xf3dfa2, road: 0xa89f91, roadLine: 0xfff7e0, curbA: 0xff7f50, curbB: 0xffffff,
@@ -86,6 +90,7 @@ export const COURSES = [
       { at: 8.8, lanes: [-1, 0, 1] },
       { at: 11.8, lanes: [-1, 0, 1] },
     ],
+    jumps: [{ at: 4.4 }, { at: 11.9 }],
     palette: {
       skyTop: 0x6fa8ff, skyBottom: 0xeaf4ff, fog: 0xeaf4ff, fogNear: 90, fogFar: 380,
       ground: 0xf4f9ff, road: 0xb9c6d6, roadLine: 0xffffff, curbA: 0x4d8bff, curbB: 0xffffff,
@@ -120,6 +125,7 @@ export const COURSES = [
       { at: 9.0, lanes: [-1, 0, 1] },
       { at: 12.2, lanes: [-1, 0, 1] },
     ],
+    jumps: [{ at: 5.4 }, { at: 12.6 }],
     palette: {
       skyTop: 0x2b0f1a, skyBottom: 0xff7a3d, fog: 0x5a2a20, fogNear: 80, fogFar: 330,
       ground: 0x3a2a2a, road: 0x4a4646, roadLine: 0xff9f43, curbA: 0xff5722, curbB: 0x222222,
@@ -150,6 +156,7 @@ export const COURSES = [
       { at: 8.5, lanes: [-1, 0, 1] },
       { at: 11.5, lanes: [-1, 0, 1] },
     ],
+    jumps: [{ at: 2.2 }, { at: 8.6 }],
     palette: {
       skyTop: 0x05061a, skyBottom: 0x2a1f5e, fog: 0x1a1440, fogNear: 100, fogFar: 380,
       ground: 0x1b1b2b, road: 0x2e2e3a, roadLine: 0xfff275, curbA: 0xff2e88, curbB: 0x33e1ff,

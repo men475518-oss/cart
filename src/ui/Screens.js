@@ -8,7 +8,7 @@ import { buildKartModel } from '../race/KartModel.js';
 import { KEYMAP_LABELS } from '../core/Input.js';
 import { settings } from '../core/Settings.js';
 import { audio } from '../core/Audio.js';
-import { defaultServerUrl, isStaticHost, hasServerConfigured } from '../net/NetClient.js';
+import { defaultServerUrl, hasServerConfigured, BUILT_IN_SERVER_URL } from '../net/NetClient.js';
 
 export function h(html) {
   const t = document.createElement('template');
@@ -327,9 +327,9 @@ export function onlineScreen({ net, profile, onRace, onBack, onEditProfile }) {
           <div class="join-row"><input type="text" id="ol-code" maxlength="4" placeholder="ルームコード" autocapitalize="characters"><button class="btn" data-act="join">🔑 参加</button><button class="btn" data-act="spectate">👀 観戦</button></div>
           <button class="btn" data-act="casual">🎲 カジュアルマッチ（だれでも）</button>
         </div>
-        <details class="server-details"><summary>サーバー設定（LAN 対戦 / 自前サーバー）</summary>
-          <label>サーバーアドレス <input type="text" id="ol-server" placeholder="例: 192.168.1.10:8787（空欄で標準）" value="${esc(settings.get('serverUrl') || '')}"></label>
-          <p class="hint">インターネット越しに遊ぶには、対戦サーバーの URL（例 <code>https://mofukart-server.xxx.workers.dev</code>）を入れてください。<br>同じ Wi-Fi の端末同士なら、1台で <code>npm run server</code> を起動してその端末の IP を入力します（このときゲーム自体も同じ端末の <code>npm run dev</code> から開いてください）。</p>
+        <details class="server-details"><summary>べつのサーバーを使う（上級者向け）</summary>
+          <label>サーバーアドレス <input type="text" id="ol-server" placeholder="空欄のままで OK" value="${esc(settings.get('serverUrl') || '')}"></label>
+          <p class="hint">ふだんは空欄のままで遊べます${BUILT_IN_SERVER_URL ? `（標準の接続先: <code>${esc(BUILT_IN_SERVER_URL)}</code>）` : ''}。<br>自分で立てたサーバーや、同じ Wi-Fi 内のパソコン（<code>npm run server</code>）につなぎたいときだけ入力してください。</p>
         </details>
         <p class="ol-status"></p>
       </div>
@@ -359,12 +359,11 @@ export function onlineScreen({ net, profile, onRace, onBack, onEditProfile }) {
     return { name, char: profile.char, kart: profile.kart };
   };
   const refreshNotice = () => {
-    const need = isStaticHost() && !(q('#ol-server').value || '').trim();
+    // 対戦サーバーはビルドに組み込まれているので、ふだんは何も表示しない
+    const need = !hasServerConfigured();
     const el2 = q('.ol-notice');
     el2.style.display = need ? '' : 'none';
-    el2.innerHTML = need
-      ? 'このページは静的ホスティングで公開されているため、対戦サーバーが同居していません。<br>下の「サーバー設定」に対戦サーバーのアドレスを入れると、オンライン対戦が使えます。<br>サーバーなしでも「ひとりで遊ぶ」と「ローカル対戦（画面分割）」はそのまま遊べます。'
-      : '';
+    el2.innerHTML = need ? '対戦サーバーが見つかりません。下の「サーバー設定」にアドレスを入れてください。' : '';
     for (const b of el.querySelectorAll('[data-act=create],[data-act=join],[data-act=spectate],[data-act=casual]')) b.disabled = need;
     if (need) q('.server-details').open = true;
   };

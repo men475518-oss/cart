@@ -30,6 +30,10 @@ class App {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: this.quality === 'high', powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality === 'high' ? 2 : 1.25));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    if (this.quality !== 'low') {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
     this.input = new InputManager();
     this.net = new NetClient();
     this.screen = null;
