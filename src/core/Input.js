@@ -194,6 +194,15 @@ export class InputManager {
  * 左側: ステアリング（ドラッグ）、右側: アクセル / ドリフト / アイテム ボタン
  */
 // タッチのハンドル: 画面幅に関係なく同じ指の移動量で切れ角が決まるようにする
+/** ポインタのキャプチャ。すでに指が離れているときは例外になるので握りつぶす */
+function capture(el, id) {
+  try {
+    el.setPointerCapture?.(id);
+  } catch (e) {
+    /* まだ / もう有効でないポインタ。キャプチャなしでも動く */
+  }
+}
+
 const STEER_TRAVEL = 78; // いっぱいまで切るのに必要な指の移動量（CSS px）
 const STEER_DEAD = 7;    // 手ぶれを拾わないための遊び
 
@@ -251,7 +260,7 @@ export class TouchControls {
       this._steerPointer = e.pointerId;
       this._steerOrigin = e.clientX;
       placeWheel(e.clientX, e.clientY);
-      steerZone.setPointerCapture?.(e.pointerId);
+      capture(steerZone, e.pointerId);
       steerZone.classList.add('active', 'used'); // 一度さわったら説明は出しっぱなしにしない
       setSteer(0);
       e.preventDefault();
@@ -296,7 +305,7 @@ export class TouchControls {
         if (name === 'drift') this.state.driftEdge = true;
         btn.classList.add('pressed');
         this._buttonPointers.set(e.pointerId, name);
-        btn.setPointerCapture?.(e.pointerId);
+        capture(btn, e.pointerId);
         if (settings.get('hapticFeedback') && navigator.vibrate && name !== 'accel') navigator.vibrate(8);
         e.preventDefault();
       };

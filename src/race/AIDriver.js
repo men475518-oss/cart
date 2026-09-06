@@ -1,5 +1,6 @@
 // CPU ドライバー
 import { clamp, wrapAngle } from '../core/Utils.js';
+import { DRIFT_TIERS } from './KartPhysics.js';
 
 const LEVELS = {
   easy: { skill: 0.72, speed: 0.86, itemDelay: 4, driftSkill: 0.3, band: 0.05, corner: 0.85 },
@@ -92,7 +93,9 @@ export class AIDriver {
     } else {
       // ドリフト中: 直線に入った / ためすぎ / 内側に寄りすぎてカウンターを当て続けている → 解除
       this.counterTime = steer * s.driftDir < -0.6 ? (this.counterTime || 0) + dt : 0;
-      const done = Math.abs(turn) < 0.15 || s.driftCharge > 3.4 || speedNorm < 0.4 || this.counterTime > 0.3;
+      // 最終段まで貯まったら、それ以上ためても得はないので抜ける
+      const maxed = s.driftCharge > DRIFT_TIERS[DRIFT_TIERS.length - 1].time * 1.05;
+      const done = Math.abs(turn) < 0.15 || maxed || speedNorm < 0.4 || this.counterTime > 0.3;
       inp.drift = !done;
       if (done) this.driftHold = 0.8;
     }
@@ -111,10 +114,11 @@ export class AIDriver {
     const radius = maxCurv > 1e-4 ? 1 / maxCurv : 1e9;
     const turnRate = k.params.handling * 0.7 * (s.drifting ? 1.5 : 1);
     const vLimit = Math.max(16, turnRate * radius) * lvl.corner * this.personality;
-    inp.accel = s.speed > vLimit ? 0 : 1;
-    inp.brake = s.speed > vLimit * 1.3 || (Math.abs(diff) > 1.1 && speedNorm > 0.75) ? 1 : 0;
+    // ブースト中は少しだけ上限を上げる。まるごと無視すると曲がり切れずに壁へ突っこむ
+    const limit = s.boostTime > 0 ? vLimit * 1.15 : vLimit;
+    inp.accel = s.speed > limit ? 0 : 1;
+    inp.brake = s.speed > limit * 1.3 || (Math.abs(diff) > 1.1 && speedNorm > 0.75) ? 1 : 0;
     if (s.reverseHint > 1) inp.brake = 1;
-    if (s.boostTime > 0) inp.accel = 1;
 
     // ラバーバンド: 人間の先頭との差に応じて速度係数
     const base = k.baseMaxSpeed;

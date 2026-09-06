@@ -2,10 +2,12 @@
 import { clamp, lerp, wrapAngle, dampAngle } from '../core/Utils.js';
 import { KART_WHEELS } from '../data/kartParts.js';
 
+// ミニターボの段。ふつうのコーナー 1 つで 1 段目が出るくらいに設定している
+// （コーナー 1 つで貯まるチャージはおよそ 0.7〜1.1）
 export const DRIFT_TIERS = [
-  { time: 0.9, boost: 0.55, sfx: 'drift1', color: 0x4cc9f0 },
-  { time: 2.0, boost: 0.95, sfx: 'drift2', color: 0xff9f1c },
-  { time: 3.2, boost: 1.45, sfx: 'drift3', color: 0xc86bff },
+  { time: 0.55, boost: 0.55, sfx: 'drift1', color: 0x4cc9f0 },
+  { time: 1.25, boost: 0.95, sfx: 'drift2', color: 0xff9f1c },
+  { time: 2.2, boost: 1.45, sfx: 'drift3', color: 0xc86bff },
 ];
 
 export const MAX_COINS = 10;
@@ -195,7 +197,8 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
       s.driftTier = -1;
     } else {
       const tight = steer * s.driftDir; // -1..1 (内側に切るほど+)
-      s.driftCharge += dt * p.driftRate * (0.75 + Math.max(0, tight) * 0.6);
+      // 内側に切りつづけるほど速く貯まるが、ただ握っているだけでもそこそこ貯まる
+      s.driftCharge += dt * p.driftRate * (0.85 + Math.max(0, tight) * 0.55);
       const nextTier = s.driftTier + 1;
       if (nextTier < DRIFT_TIERS.length && s.driftCharge >= DRIFT_TIERS[nextTier].time) {
         s.driftTier = nextTier;
