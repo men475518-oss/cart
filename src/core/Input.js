@@ -191,7 +191,7 @@ export class InputManager {
 
 /**
  * タッチ操作オーバーレイ。ビューポートごとに1つ生成する。
- * 左側: ステアリング（ドラッグ）、右側: アクセル / ドリフト / アイテム ボタン
+ * 左側: ステアリング（ドラッグ）、右側: アクセル / ブレーキ（ドリフト兼用） / アイテム ボタン
  */
 // タッチのハンドル: 画面幅に関係なく同じ指の移動量で切れ角が決まるようにする
 /** ポインタのキャプチャ。すでに指が離れているときは例外になるので握りつぶす */
@@ -228,7 +228,7 @@ export class TouchControls {
       </div>
       <div class="tc-buttons">
         <button class="tc-btn tc-item" data-btn="item"><span>🎁</span><small>アイテム</small></button>
-        <button class="tc-btn tc-drift" data-btn="drift"><span>💨</span><small>ドリフト</small></button>
+        <button class="tc-btn tc-drift" data-btn="drift"><span>💨</span><small>ブレーキ</small></button>
         <button class="tc-btn tc-accel" data-btn="accel"><span>🚀</span><small>アクセル</small></button>
       </div>`;
     this.container.appendChild(root);
