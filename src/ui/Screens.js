@@ -532,8 +532,9 @@ export function settingsScreen({ onBack, input }) {
         q('#st-gyro').checked = false;
         showToast('ジャイロを使えませんでした（対応端末・HTTPS が必要です）');
       } else {
-        input.calibrateGyro();
-        showToast('ジャイロ ON。端末を持つ向きで「キャリブレーション」を押してね');
+        // ここで calibrateGyro() を呼ぶと、まだ傾きが届いていない古い値で
+        // 基準を決めてしまう。enableGyro() が最初の1回で基準を取る
+        showToast('ジャイロ ON。いまの持ち方がまっすぐになります');
       }
     } else input.disableGyro();
     s.set('gyro', q('#st-gyro').checked);
@@ -570,8 +571,8 @@ export function howtoScreen({ onBack }) {
         <ul>
           <li><b>画面左側</b>をドラッグ → ハンドル（左右にスワイプ）</li>
           <li><b>🚀 アクセル</b> 押しっぱなしで加速</li>
-          <li><b>💨 ドリフト/ブレーキ</b> ハンドルを切りながら押すとドリフト。ためると<span class="c1">青</span>→<span class="c2">オレンジ</span>→<span class="c3">むらさき</span>の火花でミニターボ！まっすぐのときはブレーキ</li>
-          <li><b>🎁 アイテム</b> でアイテム使用。ドリフトボタンを押しながらだと後ろに投げる</li>
+          <li><b>💨 ブレーキ</b> ハンドルを切りながら押すとドリフトになる。ためると<span class="c1">青</span>→<span class="c2">オレンジ</span>→<span class="c3">むらさき</span>の火花でミニターボ！まっすぐのときはブレーキ</li>
+          <li><b>🎁 アイテム</b> でアイテム使用。ブレーキボタンを押しながらだと後ろに投げる</li>
           <li>ドリフト中にハンドルをスワイプすると曲がりやすくなるよ</li>
           <li>設定で <b>ジャイロ操作</b>（傾けてハンドル）や <b>自動アクセル</b> も選べます</li>
           <li>スタート直前の「1」〜「GO!」の間にアクセルを押すと <b>ロケットスタート</b>！</li>

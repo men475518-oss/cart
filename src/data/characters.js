@@ -16,7 +16,12 @@ export const CHARACTERS = [
     kartBody: 'carrot',
     driftEffect: { style: 'petals', colors: [0xffb7c5, 0xffd6e0, 0xff8fb1] },
     boostEffect: { style: 'petals', colors: [0xff8fb1, 0xffffff] },
-    voice: { pitch: 1.7, rate: 1.2, base: 520, timbre: 'sine' },
+    voice: {
+      pitch: 1.7, rate: 1.2, base: 560, timbre: 'square',
+      // うさぎ: キュッという小さな鼻鳴き。高くて短い
+      cry: { f1: [580, 700], f2: [1750, 2100], q1: 6, q2: 8, a2: 0.5, vib: { hz: 16, cents: 25 },
+             glide: 1.22, breath: 0.06, syl: 0.08, gap: 0.05, wobble: 0.02, maxSyl: 4 },
+    },
     lines: {
       select: 'ピョン、いっくよ〜！',
       start: 'ぴょんぴょんダッシュ！',
@@ -45,7 +50,12 @@ export const CHARACTERS = [
     kartBody: 'cloud',
     driftEffect: { style: 'clouds', colors: [0xffffff, 0xe8f4ff, 0xcfe6ff] },
     boostEffect: { style: 'clouds', colors: [0xffffff, 0xbfe3ff] },
-    voice: { pitch: 1.4, rate: 0.95, base: 400, timbre: 'triangle' },
+    voice: {
+      pitch: 1.4, rate: 0.95, base: 330, timbre: 'sawtooth',
+      // ひつじ: メェェェ。細かく震えるのが命
+      cry: { f1: [640, 660], f2: [1900, 1750], q1: 5, q2: 6, a2: 0.55, vib: { hz: 25, cents: 75 },
+             glide: 0.93, breath: 0.16, syl: 0.2, gap: 0.08, wobble: 0.04, growl: 0, maxSyl: 2 },
+    },
     lines: {
       select: 'モコもいくよ〜',
       start: 'ふわふわ〜っ',
@@ -74,7 +84,12 @@ export const CHARACTERS = [
     kartBody: 'bone',
     driftEffect: { style: 'paws', colors: [0xffd27f, 0xffffff, 0xffa64d] },
     boostEffect: { style: 'fire', colors: [0xffcc00, 0xff6600] },
-    voice: { pitch: 1.1, rate: 1.05, base: 300, timbre: 'square' },
+    voice: {
+      pitch: 1.1, rate: 1.05, base: 235, timbre: 'square',
+      // しばいぬ: ワンッ。頭のアタックと、F2 が一気に落ちるのがワンに聞こえる要
+      cry: { f1: [720, 480], f2: [1500, 850], q1: 4, q2: 5, a2: 1.0, vib: { hz: 0, cents: 0 },
+             glide: 0.68, breath: 0.22, syl: 0.11, gap: 0.08, wobble: 0.03, bite: 0.7, maxSyl: 3 },
+    },
     lines: {
       select: 'タロだよ、よろしくな！',
       start: 'わんっ！いくぞー！',
@@ -103,7 +118,12 @@ export const CHARACTERS = [
     kartBody: 'fish',
     driftEffect: { style: 'stars', colors: [0xffe66d, 0xfff7c2, 0x8be9fd] },
     boostEffect: { style: 'stars', colors: [0xffe66d, 0xffffff] },
-    voice: { pitch: 1.5, rate: 1.1, base: 460, timbre: 'sine' },
+    voice: {
+      pitch: 1.5, rate: 1.1, base: 410, timbre: 'sawtooth',
+      // ねこ: ニャーオ。F2 が大きく下がると「にゃあ」に聞こえる
+      cry: { f1: [780, 560], f2: [2300, 1050], q1: 5, q2: 7, a2: 1.15, vib: { hz: 6, cents: 28 },
+             glide: 1.02, arc: 0.3, breath: 0.07, syl: 0.28, gap: 0.06, wobble: 0.03, maxSyl: 2 },
+    },
     lines: {
       select: 'にゃ〜、ミントにまかせて',
       start: 'にゃっ、いくよ！',
@@ -132,7 +152,12 @@ export const CHARACTERS = [
     kartBody: 'ice',
     driftEffect: { style: 'bubbles', colors: [0xaee6ff, 0xffffff, 0x66ccff] },
     boostEffect: { style: 'bubbles', colors: [0x66ccff, 0xffffff] },
-    voice: { pitch: 0.9, rate: 1.0, base: 260, timbre: 'triangle' },
+    voice: {
+      pitch: 0.9, rate: 1.0, base: 235, timbre: 'square',
+      // ペンギン: クワッ、クワッ。かすれた鼻声
+      cry: { f1: [700, 820], f2: [1250, 1550], q1: 3, q2: 4, a2: 0.7, vib: { hz: 11, cents: 40 },
+             glide: 0.92, breath: 0.5, syl: 0.09, gap: 0.07, wobble: 0.04, bite: 0.45, growl: 45, maxSyl: 3 },
+    },
     lines: {
       select: 'ペペ、さんじょう',
       start: 'ぺぺっ、しゅっぱつ！',
@@ -161,7 +186,12 @@ export const CHARACTERS = [
     kartBody: 'log',
     driftEffect: { style: 'rocks', colors: [0x9c7a4d, 0x6b4a2a, 0xc9a672] },
     boostEffect: { style: 'smoke', colors: [0x555555, 0x999999] },
-    voice: { pitch: 0.5, rate: 0.9, base: 150, timbre: 'sawtooth' },
+    voice: {
+      pitch: 0.5, rate: 0.9, base: 112, timbre: 'sawtooth',
+      // くま: グルルル。低くて、ざらついた唸り
+      cry: { f1: [420, 360], f2: [900, 780], q1: 3, q2: 3.5, a2: 0.8, vib: { hz: 5, cents: 50 },
+             glide: 0.8, breath: 0.3, syl: 0.3, gap: 0.09, wobble: 0.03, sub: 0.55, growl: 28, maxSyl: 2 },
+    },
     lines: {
       select: 'ドンだ。かくごしろ',
       start: 'がおーっ！',
@@ -190,7 +220,12 @@ export const CHARACTERS = [
     kartBody: 'flame',
     driftEffect: { style: 'fire', colors: [0xff4d00, 0xffb703, 0xffe066] },
     boostEffect: { style: 'fire', colors: [0xff3300, 0xffcc00] },
-    voice: { pitch: 0.8, rate: 1.1, base: 220, timbre: 'sawtooth' },
+    voice: {
+      pitch: 0.8, rate: 1.1, base: 185, timbre: 'sawtooth',
+      // こドラゴン: ガオーッ。息（炎）まじりの咆哮
+      cry: { f1: [520, 680], f2: [1150, 1650], q1: 3.5, q2: 4, a2: 0.75, vib: { hz: 9, cents: 40 },
+             glide: 1.18, breath: 0.55, syl: 0.24, gap: 0.06, wobble: 0.04, sub: 0.4, growl: 36, maxSyl: 2 },
+    },
     lines: {
       select: 'ヒノ、もえてきた！',
       start: 'ファイヤー！',
@@ -219,7 +254,12 @@ export const CHARACTERS = [
     kartBody: 'moon',
     driftEffect: { style: 'feathers', colors: [0xc8b6ff, 0xf5e6c8, 0xffe066] },
     boostEffect: { style: 'stars', colors: [0xc8b6ff, 0xffe066] },
-    voice: { pitch: 1.2, rate: 0.9, base: 350, timbre: 'sine' },
+    voice: {
+      pitch: 1.2, rate: 0.9, base: 350, timbre: 'sine',
+      // フクロウ: ホー、ホー。倍音がとても少ないやわらかい声
+      cry: { f1: [400, 380], f2: [720, 690], q1: 9, q2: 12, a2: 0.35, vib: { hz: 4.5, cents: 20 },
+             glide: 0.9, breath: 0.12, syl: 0.26, gap: 0.14, wobble: 0.02, maxSyl: 2 },
+    },
     lines: {
       select: 'ホウ…わたしのばんね',
       start: 'ほうっ、まいりましょう',

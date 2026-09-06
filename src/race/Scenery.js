@@ -404,6 +404,68 @@ export function buildScenery(track, course, quality = 'high') {
       addInstance(bulbs, p.x, p.y + 5.1, p.z);
     }
     group.add(lamps, bulbs);
+  } else if (theme === 'factory') {
+    // 工場: 煙突・タンク・パイプ・クレーン
+    const bodies = instanced(new THREE.CylinderGeometry(1, 1, 1, 10), toonMat(0xb9bec7), 90);
+    const tops = instanced(new THREE.CylinderGeometry(1.15, 1.15, 0.5, 10), toonMat(0xff9f1c), 90);
+    const tanks = instanced(new THREE.CylinderGeometry(1, 1, 1, 12), toonMat(0xcfd6de), 60);
+    const blocks = instanced(new THREE.BoxGeometry(1, 1, 1), toonMat(0x8d949e), 120);
+    const smoke = instanced(new THREE.SphereGeometry(1, 7, 5), toonMat(0xeceff3, { transparent: true, opacity: 0.75 }), 140);
+    const puffs = [];
+    for (let i = 0; i < 26 * dense; i++) {
+      const p = place(18, 46);
+      if (!p) continue;
+      if (i % 3 === 0) {
+        // 煙突
+        const h = rng.range(10, 20);
+        addInstance(bodies, p.x, groundY + h / 2, p.z, 0, rng.range(1.4, 2.4), h);
+        addInstance(tops, p.x, groundY + h, p.z, 0, rng.range(1.4, 2.4));
+        puffs.push({ x: p.x, y: groundY + h + 1, z: p.z, t: rng.range(0, 1) });
+      } else if (i % 3 === 1) {
+        // 貯蔵タンク
+        const h = rng.range(5, 9);
+        addInstance(tanks, p.x, groundY + h / 2, p.z, 0, rng.range(3, 5), h);
+      } else {
+        // 建屋
+        const h = rng.range(4, 10);
+        addInstance(blocks, p.x, groundY + h / 2, p.z, rng.range(0, 3), rng.range(6, 14), h);
+      }
+    }
+    group.add(bodies, tops, tanks, blocks, smoke);
+    // 煙突から立ちのぼる煙
+    anim.push((dt, _c, t) => {
+      smoke.count = 0;
+      for (const q of puffs) {
+        for (let k = 0; k < 4; k++) {
+          const ph = ((t * 0.28 + q.t + k * 0.25) % 1);
+          addInstance(smoke, q.x + Math.sin(ph * 5 + q.t * 9) * ph * 6, q.y + ph * 16, q.z, 0, 1.4 + ph * 4.5);
+        }
+      }
+      smoke.instanceMatrix.needsUpdate = true;
+    });
+    // 道ぞいのパイプライン
+    const pipes = instanced(new THREE.CylinderGeometry(0.35, 0.35, 1, 8), toonMat(0xffb703), 200);
+    const props = instanced(new THREE.BoxGeometry(0.5, 1, 0.5), toonMat(0x6b7079), 200);
+    for (let i = 0; i < track.N; i += 10) {
+      const smp = track.samples[i];
+      const nx = track.samples[(i + 10) % track.N];
+      const side = (i / 10) % 2 === 0 ? -1 : 1;
+      const a = smp.pos.clone().addScaledVector(smp.right, side * (track.wallDist + 2.4));
+      const b = nx.pos.clone().addScaledVector(nx.right, side * (track.wallDist + 2.4));
+      const len = a.distanceTo(b);
+      const m = new THREE.Matrix4();
+      const mid = a.clone().lerp(b, 0.5);
+      m.compose(
+        new THREE.Vector3(mid.x, mid.y + 1.8, mid.z),
+        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2).premultiply(
+          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(b.x - a.x, b.z - a.z))
+        ),
+        new THREE.Vector3(1, len, 1)
+      );
+      addInstanceM(pipes, m);
+      addInstance(props, a.x, a.y + 0.9, a.z, 0, 1, 1.8);
+    }
+    group.add(pipes, props);
   }
 
   // 共通: スタート付近の風船
@@ -486,9 +548,20 @@ export function buildLights(palette, quality = 'high') {
     sun.shadow.normalBias = 0.03;
   }
   g.add(new THREE.AmbientLight(0xffffff, palette.night ? 0.16 : 0.2));
+  const hemi = g.children[0];
+  const ambient = g.children.find((c) => c.isAmbientLight);
   return {
     group: g,
     sun,
+    /** 周回で景色が変わるコース用。ライトの色と強さを差し替える */
+    setPalette(p) {
+      hemi.color.set(p.hemiSky);
+      hemi.groundColor.set(p.hemiGround);
+      hemi.intensity = p.night ? 0.45 : 0.55;
+      sun.color.set(p.sun);
+      sun.intensity = p.sunIntensity * 0.62;
+      if (ambient) ambient.intensity = p.night ? 0.16 : 0.2;
+    },
     update(camPos) {
       if (!camPos || !sun.castShadow) return;
       sun.target.position.set(camPos.x, 0, camPos.z);

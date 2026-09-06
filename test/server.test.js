@@ -126,3 +126,13 @@ test('casual queue reports waiting status', async () => {
   a.send({ t: 'leave' });
   a.close();
 });
+
+test('サーバーが知っているコースがゲーム本体と一致する', async () => {
+  const { COURSES } = await import('../src/data/courses.js');
+  const { COURSE_IDS } = await import('../server/rooms.js');
+  assert.deepEqual(
+    [...COURSE_IDS].sort(),
+    COURSES.map((c) => c.id).sort(),
+    'コースを足したのにサーバー側が古いまま（オンラインで選べなくなる）'
+  );
+});

@@ -9,7 +9,11 @@ export const RESULT_GRACE_MS = 30000;
 export const HUMANS_DONE_GRACE_MS = 8000;
 export const RACE_HARD_LIMIT_MS = 6 * 60 * 1000;
 
-export const COURSE_IDS = ['meadow', 'beach', 'snow', 'volcano', 'city'];
+// コースはゲーム本体の定義から取る。手で並べていると、コースを足したときに
+// サーバー側だけ古いままになり、オンラインで新コースを選べなくなる
+import { COURSES } from '../src/data/courses.js';
+
+export const COURSE_IDS = COURSES.map((c) => c.id);
 export const CHAR_IDS = ['pyon', 'moco', 'taro', 'mint', 'pepe', 'don', 'hino', 'hoo'];
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 紛らわしい I/O/0/1 は除く

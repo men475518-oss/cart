@@ -299,6 +299,12 @@ class AudioEngine {
         this._tone({ freq: 1047, type: 'triangle', dur: 0.15, vol: 0.2 * v });
         this._tone({ freq: 1319, type: 'triangle', t: t + 0.12, dur: 0.3, vol: 0.2 * v });
         break;
+      case 'warp':
+        // 景色が切り替わるときの「シュワッ」
+        this._tone({ freq: 220, type: 'sawtooth', dur: 0.5, vol: 0.14 * v, sweepTo: 1760 });
+        this._tone({ freq: 330, type: 'sine', t: t + 0.05, dur: 0.45, vol: 0.1 * v, sweepTo: 2200 });
+        this._noiseBurst({ t, dur: 0.5, vol: 0.1 * v, filter: 'bandpass', freq: 600, q: 1.5, sweepTo: 4500 });
+        break;
       case 'finalLap':
         [784, 784, 1047].forEach((f, i) => this._tone({ freq: f, type: 'square', t: t + i * 0.13, dur: 0.15, vol: 0.2 * v }));
         break;
@@ -528,7 +534,19 @@ class AudioEngine {
   }
 
   // ---------- キャラクターボイス ----------
-  /** 手続き音声（短い鳴き声）＋ 音声合成（対応環境） */
+  /**
+   * 鳴き声をその場で合成する。キャラごとの voice.cry で声質が決まる。
+   * 動物の鳴き声らしさは、声道の共鳴（フォルマント）が 1 音のあいだに
+   * どう動くかでほぼ決まるので、F1・F2 の 2 本を動かしながら鳴らす。
+   *   f1 / f2 … 第1・第2フォルマントの [はじめ, おわり] (Hz)
+   *   q1 / q2 … それぞれの鋭さ、a2 … F2 の混ぜ具合
+   *   vib     … ビブラート（ひつじの「めー」、くまのうなり）
+   *   glide   … 1 音のなかで基音がどれだけ上下するか（1 未満は下がる）
+   *   arc     … いったん上がってから下がる（ねこの「にゃ〜お」）
+   *   breath  … 息の音の量、bite … 頭の短いアタック（犬の「わんっ」）
+   *   growl   … 声のざらつき（Hz。くま・ドラゴン・ペンギン）
+   *   sub     … 1 オクターブ下を重ねる量（大型キャラの重み）
+   */
   voice(char, key, opts = {}) {
     if (!this.enabled || !char) return;
     const now = performance.now();
@@ -536,28 +554,175 @@ class AudioEngine {
     const last = this._lastLineAt.get(k) || 0;
     if (now - last < (opts.minInterval ?? 2500)) return;
     this._lastLineAt.set(k, now);
-    const v = char.voice;
-    const t = this.now;
-    // 短い鳴き声パターン
-    const pat = {
-      hit: [1.4, 0.9, 0.7],
-      drift: [1.0, 1.2],
-      boost: [0.8, 1.2, 1.6],
-      item: [1.2, 1.0],
-      pass: [1.0, 1.3, 1.1],
-      win: [1.0, 1.25, 1.5, 2.0],
-      lose: [1.0, 0.85, 0.7],
-      start: [1.0, 1.0, 1.5],
-      select: [1.0, 1.3],
-    }[key] || [1.0, 1.2];
-    pat.forEach((m, i) => {
-      const f = v.base * m;
-      this._tone({ freq: f, type: v.timbre, t: t + i * 0.09, dur: 0.12, vol: 0.12, sweepTo: f * (key === 'hit' ? 0.7 : 1.1) });
-      this._tone({ freq: f * 2.5, type: 'sine', t: t + i * 0.09, dur: 0.1, vol: 0.05 });
-    });
+    this._cry(char, key);
     if (settings.get('voice') && typeof speechSynthesis !== 'undefined' && char.lines[key] && !opts.noSpeech) {
-      this._speak(char.lines[key], v.pitch, v.rate);
+      this._speak(char.lines[key], char.voice.pitch, char.voice.rate);
     }
+  }
+
+  /** 場面ごとの音程の並び。同じ場面でも 2〜3 通りから選んで単調にしない */
+  _cryShape(key, seed) {
+    const shapes = {
+      // [音程の倍率, 長さの倍率, 音量の倍率]
+      hit: [
+        [[1.55, 0.7, 1.15], [0.95, 0.9, 0.8]],
+        [[1.7, 0.55, 1.2], [1.1, 0.7, 0.9], [0.8, 1.1, 0.6]],
+      ],
+      drift: [[[1.05, 0.8, 0.7], [1.25, 1.0, 0.6]], [[1.15, 0.9, 0.65]]],
+      boost: [
+        [[0.85, 0.7, 0.85], [1.2, 0.7, 0.95], [1.6, 1.1, 1.0]],
+        [[1.0, 0.6, 0.9], [1.5, 1.2, 1.0]],
+      ],
+      item: [[[1.2, 0.7, 0.85], [1.0, 0.9, 0.7]], [[1.35, 0.6, 0.9]]],
+      pass: [[[1.0, 0.7, 0.8], [1.3, 0.7, 0.85], [1.15, 1.0, 0.7]], [[1.25, 0.8, 0.85], [1.05, 1.0, 0.7]]],
+      win: [
+        [[1.0, 0.7, 1.0], [1.25, 0.7, 1.0], [1.5, 0.7, 1.05], [2.0, 1.6, 1.1]],
+        [[1.2, 0.6, 1.0], [1.5, 0.6, 1.0], [1.8, 0.6, 1.05], [2.4, 1.5, 1.1]],
+      ],
+      lose: [[[1.0, 1.0, 0.8], [0.85, 1.2, 0.7], [0.68, 1.8, 0.6]], [[0.9, 1.3, 0.75], [0.7, 2.0, 0.6]]],
+      start: [[[1.0, 0.6, 0.9], [1.0, 0.6, 0.9], [1.5, 1.2, 1.05]], [[1.2, 0.7, 0.95], [1.6, 1.1, 1.05]]],
+      select: [[[1.0, 0.8, 0.9], [1.3, 1.0, 0.9]], [[1.15, 0.9, 0.9], [1.45, 1.0, 0.9]]],
+      lap: [[[1.3, 0.7, 0.9], [1.6, 1.0, 0.95]]],
+    };
+    const list = shapes[key] || [[[1.0, 0.9, 0.85], [1.2, 1.0, 0.8]]];
+    return list[seed % list.length];
+  }
+
+  /** 鳴き声本体 */
+  _cry(char, key) {
+    const ctx = this.ctx;
+    const v = char.voice;
+    const c = v.cry || {};
+    const f1 = c.f1 || [700, 700];
+    const f2 = c.f2 || [1500, 1500];
+    const vib = c.vib || { hz: 0, cents: 0 };
+    const glide = c.glide === undefined ? 1.0 : c.glide;
+    const arc = c.arc || 0;
+    const breath = c.breath || 0;
+    const sylDur = c.syl || 0.13;
+    const gap = c.gap || 0.08;
+    const wobble = c.wobble || 0;
+    const seed = (this._crySeed = ((this._crySeed || 0) + 1) >>> 0);
+    // 動物ごとに一度に鳴らす音の数はちがう。くまは長く 1〜2 声、
+    // うさぎは短く何度も。場面の並びをその上限まで切りつめる
+    let shape = this._cryShape(key, seed);
+    if (c.maxSyl && shape.length > c.maxSyl) {
+      // 最初と最後は残して、真ん中を間引く（上がり下がりの形はくずさない）
+      const keep = [shape[0]];
+      const step = (shape.length - 1) / (c.maxSyl - 1);
+      for (let n = 1; n < c.maxSyl; n++) keep.push(shape[Math.round(n * step)]);
+      shape = keep;
+    }
+
+    // 出口。ここに F1・F2 の 2 本を並列につなぐ
+    const out = ctx.createGain();
+    out.gain.value = 1;
+    out.connect(this.sfxGain);
+
+    let t = this.now;
+    shape.forEach(([mul, lenMul, volMul], i) => {
+      // 音程は毎回すこしゆらす（何度聞いてもまったく同じにならないように）
+      const jitter = 1 + (((seed * 37 + i * 61) % 21) / 10 - 1) * wobble;
+      const f0 = v.base * mul * jitter;
+      const dur = sylDur * lenMul;
+      const vol = 0.16 * volMul;
+      const end = t + dur;
+
+      // --- 声道（フォルマント 2 本）。音のあいだに動かすのが鳴き声らしさの要 ---
+      const tract = [];
+      for (const [range, q, amp] of [
+        [f1, c.q1 || 5, 1.0],
+        [f2, c.q2 || 6, c.a2 === undefined ? 0.7 : c.a2],
+      ]) {
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.Q.value = q;
+        bp.frequency.setValueAtTime(range[0], t);
+        if (range[1] !== range[0]) bp.frequency.linearRampToValueAtTime(range[1], end);
+        const bg = ctx.createGain();
+        bg.gain.value = amp;
+        bp.connect(bg).connect(out);
+        tract.push(bp);
+      }
+      const toTract = (node) => {
+        for (const bp of tract) node.connect(bp);
+      };
+
+      // --- 声帯（基音）---
+      const o = ctx.createOscillator();
+      o.type = v.timbre;
+      o.frequency.setValueAtTime(f0, t);
+      if (arc) {
+        // いったん上がってから下がる（ねこの「にゃ〜お」）
+        o.frequency.linearRampToValueAtTime(f0 * (1 + arc), t + dur * 0.3);
+        o.frequency.exponentialRampToValueAtTime(Math.max(30, f0 * glide * 0.75), end);
+      } else if (glide !== 1) {
+        o.frequency.exponentialRampToValueAtTime(Math.max(30, f0 * glide), end);
+      }
+      const g = ctx.createGain();
+      const attack = c.bite ? 0.004 : Math.min(0.035, dur * 0.25);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, end);
+      o.connect(g);
+      toTract(g);
+      o.start(t);
+      o.stop(end + 0.05);
+
+      // ビブラート
+      if (vib.hz > 0 && vib.cents > 0) {
+        const lfo = ctx.createOscillator();
+        const lg = ctx.createGain();
+        lfo.frequency.value = vib.hz;
+        lg.gain.value = vib.cents;
+        lfo.connect(lg).connect(o.detune);
+        lfo.start(t);
+        lfo.stop(end + 0.05);
+      }
+      // 声のざらつき（うなり・かすれ）。音量を細かく揺らす
+      if (c.growl) {
+        const rough = ctx.createOscillator();
+        const rg = ctx.createGain();
+        rough.type = 'square';
+        rough.frequency.value = c.growl;
+        rg.gain.value = 0.45;
+        rough.connect(rg).connect(g.gain);
+        rough.start(t);
+        rough.stop(end + 0.05);
+      }
+      // 1 オクターブ下を重ねて体の大きさを出す
+      if (c.sub) {
+        const so = ctx.createOscillator();
+        so.type = 'sine';
+        so.frequency.setValueAtTime(f0 / 2, t);
+        if (glide !== 1) so.frequency.exponentialRampToValueAtTime(Math.max(20, (f0 / 2) * glide), end);
+        const sg = ctx.createGain();
+        sg.gain.setValueAtTime(0.0001, t);
+        sg.gain.linearRampToValueAtTime(vol * c.sub, t + attack);
+        sg.gain.exponentialRampToValueAtTime(0.0001, end);
+        so.connect(sg).connect(out); // 低音は声道を通さずそのまま
+        so.start(t);
+        so.stop(end + 0.05);
+      }
+      // 息づかい。声道を通すので「はー」という声に聞こえる
+      if (breath > 0) {
+        const ns = ctx.createBufferSource();
+        ns.buffer = this._noise();
+        const ng = ctx.createGain();
+        ng.gain.setValueAtTime(0.0001, t);
+        ng.gain.linearRampToValueAtTime(0.16 * breath * volMul, t + attack);
+        ng.gain.exponentialRampToValueAtTime(0.0001, end);
+        ns.connect(ng);
+        toTract(ng);
+        ns.start(t);
+        ns.stop(end + 0.05);
+      }
+      // 頭の「カッ」というアタック（犬・ペンギン）
+      if (c.bite && i === 0) {
+        this._noiseBurst({ t, dur: 0.035, vol: 0.11 * c.bite, filter: 'bandpass', freq: f2[0], q: 1.0, dest: out });
+      }
+      t = end + gap;
+    });
   }
 
   _speak(text, pitch, rate) {

@@ -210,6 +210,8 @@ class App {
 
   startRace(config, opts = {}) {
     this._leaveRace();
+    // レースのたびに今の持ち方をまっすぐとみなす（寝ころんで遊んでもまっすぐ走る）
+    if (this.input.gyro.enabled) this.input.requestGyroCalibration();
     this.show(null);
     const loading = UI.loadingOverlay(`${getCourse(config.courseId).name} をじゅんびちゅう…`);
     this.uiRoot.appendChild(loading);
@@ -364,4 +366,7 @@ class App {
 
 window.addEventListener('DOMContentLoaded', () => {
   window.__app = new App();
+  // 動作確認用。test/voicecheck から鳴らしたり、test/gyro から設定を切り替えたりする
+  window.__audio = audio;
+  window.__settings = settings;
 });

@@ -131,8 +131,12 @@ for (const course of COURSES) {
   }, [cx, cy, noDrift]);
   await page.mouse.up();
 
-  check(stats.finished, `タッチ操作だけで 1 周できる（${stats.lap} 秒）`);
-  check(stats.walls <= 3, `壁に当たるのは 3 回まで（${stats.walls} 回）`);
+  // しかけのあるコースは、はじかれて壁にこすることが増える。そのぶん多めに見る
+  const rough = (course.gimmicks || []).length > 0;
+  const wallBudget = rough ? 30 : 3;
+  const lapLimit = rough ? 70 : 45;
+  check(stats.finished && stats.lap < lapLimit, `タッチ操作だけで 1 周できる（${stats.lap} 秒 / ${lapLimit} 秒まで）`);
+  check(stats.walls <= wallBudget, `壁に当たるのは ${wallBudget} 回まで（${stats.walls} 回）`);
   check(stats.offroadPct <= 25, `コース外に出るのは 25% まで（${stats.offroadPct}%）`);
   if (!NODRIFT) {
     check(stats.driftFrames > 0, `ドリフトボタンでドリフトに入れる（${stats.driftPct}%）`);
