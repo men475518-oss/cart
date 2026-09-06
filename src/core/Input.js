@@ -9,6 +9,10 @@ const KEYMAPS = [
   { left: ['Numpad4'], right: ['Numpad6'], accel: ['Numpad8'], brake: ['Numpad5'], drift: ['Numpad7'], item: ['Numpad9'] },
 ];
 
+// ジャイロ: いっぱいに切るまでの傾き（度）と、手ぶれを拾わないための遊び
+const GYRO_RANGE = 30;
+const GYRO_DEAD = 3.5;
+
 export const KEYMAP_LABELS = [
   '← → ハンドル / ↑ アクセル / ↓ ブレーキ / Shift ドリフト / Space アイテム',
   'A D ハンドル / W アクセル / S ブレーキ / Q ドリフト / E アイテム',
@@ -36,7 +40,7 @@ class PlayerInput {
 export class InputManager {
   constructor() {
     this.players = [0, 1, 2, 3].map((i) => new PlayerInput(i));
-    this.gyro = { enabled: false, steer: 0, offset: 0, raw: 0, supported: typeof DeviceOrientationEvent !== 'undefined' };
+    this.gyro = { enabled: false, steer: 0, smooth: 0, offset: 0, raw: 0, needsCalibrate: true, supported: typeof DeviceOrientationEvent !== 'undefined' };
     this.now = 0;
     this._keys = new Set();
     this._edges = new Set(); // フレーム間に押されたキー（短押し取りこぼし防止）
@@ -77,16 +81,32 @@ export class InputManager {
       return false;
     }
     window.addEventListener('deviceorientation', this._onOrient);
+    // 画面の向きが変わると傾きの読み方も変わるので、基準を取り直す
+    this._onOrientChange = () => this.requestGyroCalibration();
+    window.addEventListener('orientationchange', this._onOrientChange);
+    if (screen.orientation) screen.orientation.addEventListener?.('change', this._onOrientChange);
     this.gyro.enabled = true;
+    this.requestGyroCalibration(); // 最初の1回は今の持ち方をまっすぐとみなす
     return true;
   }
   disableGyro() {
     window.removeEventListener('deviceorientation', this._onOrient);
+    if (this._onOrientChange) {
+      window.removeEventListener('orientationchange', this._onOrientChange);
+      if (screen.orientation) screen.orientation.removeEventListener?.('change', this._onOrientChange);
+      this._onOrientChange = null;
+    }
     this.gyro.enabled = false;
     this.gyro.steer = 0;
+    this.gyro.smooth = 0;
+  }
+  /** 次に傾きが届いたときの持ち方を「まっすぐ」にする */
+  requestGyroCalibration() {
+    this.gyro.needsCalibrate = true;
   }
   calibrateGyro() {
     this.gyro.offset = this.gyro.raw;
+    this.gyro.needsCalibrate = false;
   }
   _onOrient(e) {
     const angle = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
@@ -96,10 +116,20 @@ export class InputManager {
     else if (angle === 180) tilt = -(e.gamma ?? 0);
     else tilt = e.gamma ?? 0;
     this.gyro.raw = tilt;
-    const range = 28 / (settings.get('gyroSensitivity') || 1);
-    let s = clamp((tilt - this.gyro.offset) / range, -1, 1);
+    // 端末を持つ角度は人それぞれなので、遊びはじめの持ち方をまっすぐとみなす
+    if (this.gyro.needsCalibrate) {
+      this.gyro.offset = tilt;
+      this.gyro.needsCalibrate = false;
+    }
+    const range = GYRO_RANGE / (settings.get('gyroSensitivity') || 1);
+    const d = tilt - this.gyro.offset;
+    // 持っているだけの手ぶれで曲がらないよう、中央に遊びを入れる
+    const mag = Math.max(0, Math.abs(d) - GYRO_DEAD) / Math.max(1, range - GYRO_DEAD);
+    let s = clamp(mag, 0, 1) * Math.sign(d);
     if (settings.get('gyroInvert')) s = -s;
-    this.gyro.steer = s;
+    // 手のふるえをならす
+    this.gyro.smooth = this.gyro.smooth * 0.6 + s * 0.4;
+    this.gyro.steer = Math.abs(this.gyro.smooth) < 0.01 ? 0 : this.gyro.smooth;
   }
 
   /** タッチ操作オーバーレイからの入力を登録 */

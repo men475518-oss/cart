@@ -5,6 +5,51 @@ import { ParticleSystem } from '../race/Effects.js';
 import { audio } from '../core/Audio.js';
 import { formatTime } from '../core/Utils.js';
 
+const _numTex = new Map();
+/** 表彰台の前面にはる順位の数字 */
+function numberTexture(text) {
+  if (_numTex.has(text)) return _numTex.get(text);
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 128, 128);
+  g.font = 'bold 96px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineWidth = 10;
+  g.strokeStyle = 'rgba(0,0,0,0.35)';
+  g.strokeText(text, 64, 70);
+  g.fillStyle = '#fff';
+  g.fillText(text, 64, 70);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  _numTex.set(text, tex);
+  return tex;
+}
+
+let _bannerTex = null;
+/** 表彰台のうしろにかかる横断幕 */
+function bannerTexture(course) {
+  if (_bannerTex) return _bannerTex;
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ff4d6d';
+  g.fillRect(0, 0, 1024, 128);
+  g.fillStyle = 'rgba(255,255,255,0.25)';
+  for (let i = 0; i < 1024; i += 64) g.fillRect(i, 0, 32, 128);
+  g.font = 'bold 70px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#fff';
+  g.fillText(`\u{1F3C6} ${course.name} \u{1F3C6}`, 512, 68);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  _bannerTex = tex;
+  return tex;
+}
+
 export class ResultsScreen {
   constructor({ renderer, root, results, course, onAction, online = false }) {
     this.renderer = renderer;
@@ -24,33 +69,62 @@ export class ResultsScreen {
     const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 32), new THREE.MeshLambertMaterial({ color: pal.ground }));
     ground.rotation.x = -Math.PI / 2;
     this.scene.add(ground);
-    // 表彰台
+    // 表彰台。1 位を中央に、2 位を左、3 位を右に置く
     const podium = [
-      { x: 0, h: 2.4, color: 0xffd23f },
-      { x: -3.6, h: 1.7, color: 0xcfd8dc },
-      { x: 3.6, h: 1.2, color: 0xcd7f32 },
+      { x: 0, h: 2.4, color: 0xffd23f, label: '1' },
+      { x: -3.6, h: 1.7, color: 0xcfd8dc, label: '2' },
+      { x: 3.6, h: 1.2, color: 0xcd7f32, label: '3' },
     ];
+    // 台の下の敷き板。表彰台が地面から生えているように見えないように
+    const base = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.35, 4.4), new THREE.MeshLambertMaterial({ color: 0xf3f3f6 }));
+    base.position.set(0, 0.175, 0);
+    this.scene.add(base);
     this.anims = [];
     podium.forEach((p, i) => {
       const box = new THREE.Mesh(new THREE.BoxGeometry(3.2, p.h, 3.2), new THREE.MeshLambertMaterial({ color: p.color }));
-      box.position.set(p.x, p.h / 2, 0);
+      box.position.set(p.x, 0.35 + p.h / 2, 0);
       this.scene.add(box);
+      // 段の前面に順位の数字
+      const plate = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.5, 1.5),
+        new THREE.MeshBasicMaterial({ map: numberTexture(p.label), transparent: true })
+      );
+      plate.position.set(p.x, 0.35 + p.h * 0.5, 1.61);
+      this.scene.add(plate);
       const r = results[i];
       if (!r) return;
       const model = buildKartModel(r.char, r.kartOpts || {});
-      model.group.position.set(p.x, p.h, 0);
+      model.group.position.set(p.x, 0.35 + p.h, 0);
       model.group.rotation.y = Math.PI;
       this.scene.add(model.group);
-      this.anims.push({ model, char: r.char, win: i === 0, rank: i + 1, base: p.h, x: p.x });
+      this.anims.push({ model, char: r.char, win: i === 0, rank: i + 1, base: 0.35 + p.h, x: p.x });
     });
-    // 4位以降は後ろに並ぶ
-    results.slice(3).forEach((r, i) => {
+    // 4位以降は表彰台の後ろに左右対称に並ぶ
+    const rest = results.slice(3);
+    rest.forEach((r, i) => {
       const model = buildKartModel(r.char, r.kartOpts || {});
-      model.group.position.set(-6 + i * 3.4, 0, -6);
+      const spread = 4.2;
+      const x = (i - (rest.length - 1) / 2) * spread;
+      model.group.position.set(x, 0, -11);
       model.group.rotation.y = Math.PI;
       this.scene.add(model.group);
-      this.anims.push({ model, char: r.char, win: false, rank: i + 4, base: 0, x: model.group.position.x });
+      this.anims.push({ model, char: r.char, win: false, rank: i + 4, base: 0, x });
     });
+    // 背景の横断幕。緑の地面だけだと表彰式に見えない
+    const gate = new THREE.Group();
+    for (const side of [-1, 1]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 7, 8), new THREE.MeshLambertMaterial({ color: 0xdfe4ea }));
+      pole.position.set(side * 8.5, 3.5, -6);
+      gate.add(pole);
+    }
+    const banner = new THREE.Mesh(
+      new THREE.BoxGeometry(17.6, 2.2, 0.3),
+      new THREE.MeshLambertMaterial({ map: bannerTexture(course), color: 0xffffff })
+    );
+    banner.position.set(0, 6.2, -6);
+    gate.add(banner);
+    this.scene.add(gate);
+
     this.particles = new ParticleSystem(this.scene, 600);
     this.camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 300);
     this.resize(renderer.domElement.clientWidth || window.innerWidth, renderer.domElement.clientHeight || window.innerHeight);
@@ -102,10 +176,26 @@ export class ResultsScreen {
   update(dt) {
     this.time += dt;
     const t = this.time;
-    // カメラゆっくり回る
+    // カメラゆっくり回る。順位表のパネルは横画面なら右、縦画面なら下にあるので、
+    // 表彰台がその裏に隠れないように画をずらす
     const a = Math.sin(t * 0.3) * 0.35;
-    this.camera.position.set(Math.sin(a) * 14, 5.5 + Math.sin(t * 0.5) * 0.3, Math.cos(a) * 14);
-    this.camera.lookAt(0, 2.2, 0);
+    const dist = this.portrait ? 17 : 15;
+    const eye = new THREE.Vector3(Math.sin(a) * dist, 5.6 + Math.sin(t * 0.5) * 0.3, Math.cos(a) * dist);
+    const target = new THREE.Vector3(0, 2.4, 0);
+    // 視線に対する右と上を求めて、その方向にカメラごと平行移動する
+    const fwd = target.clone().sub(eye).normalize();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+    const halfH = dist * Math.tan((this.camera.fov * Math.PI) / 360);
+    const halfW = halfH * this.camera.aspect;
+    // 横画面: 表彰台を左寄せ / 縦画面: 上寄せ
+    const panX = this.portrait ? 0 : halfW * 0.3;
+    const panY = this.portrait ? -halfH * 0.42 : 0;
+    const shift = right.multiplyScalar(panX).add(up.multiplyScalar(panY));
+    eye.add(shift);
+    target.add(shift);
+    this.camera.position.copy(eye);
+    this.camera.lookAt(target);
     // 紙吹雪
     if (Math.random() < 0.7) {
       this.particles.emit((Math.random() - 0.5) * 16, 11, (Math.random() - 0.5) * 8 - 2, (Math.random() - 0.5) * 2, -1, 0, [0xffd23f, 0xff5c8a, 0x4cc9f0, 0x7bff7b, 0xc86bff][Math.floor(Math.random() * 5)], 4, 1.5);
