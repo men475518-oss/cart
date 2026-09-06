@@ -5,6 +5,7 @@ import { buildScenery, buildLights } from './Scenery.js';
 import { buildKartModel } from './KartModel.js';
 import { buildParams, createKartState, stepKart, applyBoost, spinOut, resolveKartCollision, DRIFT_TIERS, MAX_COINS } from './KartPhysics.js';
 import { CoinSystem } from './Coins.js';
+import { GimmickSystem } from './Gimmicks.js';
 import { AIDriver } from './AIDriver.js';
 import { ItemSystem } from './ItemSystem.js';
 import { ParticleSystem, FxManager, EFFECT_STYLES } from './Effects.js';
@@ -68,10 +69,23 @@ export class Race {
     this.scene.background = new THREE.Color(pal.skyBottom);
     this.scene.fog = new THREE.Fog(pal.fog, pal.fogNear, pal.fogFar);
     this.track = new Track(this.course);
-    this.scene.add(this.track.buildMesh(pal, this.quality));
-    const sc = buildScenery(this.track, this.course, this.quality);
-    this.scene.add(sc.group);
-    this.sceneryAnim = sc.anim;
+    // 周回ごとに景色が変わるコースは、テーマのぶんだけ路面と背景を作っておいて切り替える。
+    // 路面の色は頂点に焼きこんであるので、あとから塗り替えるより作り分けたほうが速い
+    this.lapThemes = this.course.lapThemes || null;
+    this.themeIndex = 0;
+    this.sceneries = [];
+    const themes = this.lapThemes || [{ theme: this.course.theme, palette: {} }];
+    themes.forEach((th, i) => {
+      const themePal = { ...pal, ...(th.palette || {}) };
+      const mesh = this.track.buildMesh(themePal, this.quality);
+      mesh.visible = i === 0;
+      this.scene.add(mesh);
+      const sc = buildScenery(this.track, { ...this.course, theme: th.theme || this.course.theme, palette: themePal }, this.quality);
+      sc.group.visible = i === 0;
+      this.scene.add(sc.group);
+      this.sceneries.push({ ...sc, mesh, palette: themePal, label: th.label || '' });
+    });
+    this.sceneryAnim = this.sceneries[0].anim;
     this.lights = buildLights(pal, this.quality);
     this.scene.add(this.lights.group);
     this.particles = new ParticleSystem(this.scene, this.quality === 'low' ? 400 : 900);
@@ -93,6 +107,7 @@ export class Race {
       : null;
     this.items = new ItemSystem({ track: this.track, scene: this.scene, karts: this.karts, rng: this.rng, events: this.events, fx: this.fx, particles: this.particles, net: netHooks });
     this.coins = new CoinSystem({ track: this.track, scene: this.scene, karts: this.karts, events: this.events });
+    this.gimmicks = new GimmickSystem({ track: this.track, scene: this.scene, karts: this.karts, events: this.events, particles: this.particles, course: this.course });
 
     // ビューポート（ローカル人間プレイヤー or 観戦）
     this.viewports = [];
@@ -392,6 +407,7 @@ export class Race {
     if (racing) {
       this.items.update(dt, this.rankOf);
       this.coins.update(dt, this.viewports.map((vp) => vp.rig.camera.position));
+      this.gimmicks.update(dt);
     }
 
     // ---------- ラップ・順位・ゴール ----------
@@ -809,6 +825,8 @@ export class Race {
           if (isView) audio.sfx('itemGet', { vol: 0.5 });
           break;
         case 'lap':
+          // 周回ごとに景色が変わるコース。見ているプレイヤーの周回に合わせる
+          if (isView && this.lapThemes) this._setTheme(e.lap % this.sceneries.length);
           if (isView) {
             const final = e.lap === this.laps;
             audio.sfx(final ? 'finalLap' : 'lap');
@@ -966,6 +984,24 @@ export class Race {
     }
   }
 
+  /** 景色をまるごと切り替える（空・地面・まわりの物・ライト） */
+  _setTheme(i) {
+    if (!this.sceneries[i] || i === this.themeIndex) return;
+    this.themeIndex = i;
+    const sc = this.sceneries[i];
+    this.sceneries.forEach((x, n) => {
+      x.group.visible = n === i;
+      x.mesh.visible = n === i;
+    });
+    this.sceneryAnim = sc.anim;
+    const p = sc.palette;
+    this.scene.background = new THREE.Color(p.skyBottom);
+    this.scene.fog = new THREE.Fog(p.fog, p.fogNear, p.fogFar);
+    this.lights.setPalette(p);
+    if (sc.label) for (const vp of this.viewports) vp.hud.sub(`✨ ${sc.label}`, 2.4);
+    audio.sfx("warp");
+  }
+
   render() {
     if (this.disposed) return;
     const r = this.renderer;
@@ -998,6 +1034,7 @@ export class Race {
     if (this.starBgm) audio.popBgm();
     this.items.dispose();
     this.coins.dispose();
+    this.gimmicks.dispose();
     this.particles.dispose();
     this.fx.dispose();
     if (this.net && this._netHandlers) for (const [t, h] of Object.entries(this._netHandlers)) this.net.off(t, h);

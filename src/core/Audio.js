@@ -299,6 +299,12 @@ class AudioEngine {
         this._tone({ freq: 1047, type: 'triangle', dur: 0.15, vol: 0.2 * v });
         this._tone({ freq: 1319, type: 'triangle', t: t + 0.12, dur: 0.3, vol: 0.2 * v });
         break;
+      case 'warp':
+        // 景色が切り替わるときの「シュワッ」
+        this._tone({ freq: 220, type: 'sawtooth', dur: 0.5, vol: 0.14 * v, sweepTo: 1760 });
+        this._tone({ freq: 330, type: 'sine', t: t + 0.05, dur: 0.45, vol: 0.1 * v, sweepTo: 2200 });
+        this._noiseBurst({ t, dur: 0.5, vol: 0.1 * v, filter: 'bandpass', freq: 600, q: 1.5, sweepTo: 4500 });
+        break;
       case 'finalLap':
         [784, 784, 1047].forEach((f, i) => this._tone({ freq: f, type: 'square', t: t + i * 0.13, dur: 0.15, vol: 0.2 * v }));
         break;
