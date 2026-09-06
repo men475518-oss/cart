@@ -11,6 +11,68 @@ const check = (cond, msg) => {
 };
 
 const browser = await launchChromium(['--autoplay-policy=no-user-gesture-required']);
+
+// ---------- はじめてあそぶとき（設定を保存していない状態） ----------
+{
+  console.log('■ 既定はオフ / 設定から入切できる');
+  const ctx0 = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+  const page0 = await ctx0.newPage();
+  const errs0 = [];
+  page0.on('pageerror', (e) => errs0.push(e.message));
+  await page0.addInitScript(() => {
+    window.__angle = 0;
+    Object.defineProperty(window, 'orientation', { get: () => window.__angle, configurable: true });
+  });
+  await page0.goto(BASE);
+  await page0.waitForSelector('.title-screen');
+  await page0.click('.title-screen');
+  await page0.waitForSelector('.mode-grid');
+
+  // 横長のビューポートだと Chromium は screen.orientation.angle を 90 と答えるので、
+  // 縦画面あつかいに固定してから gamma（左右の傾き）を流しこむ
+  const tilt0 = (deg) =>
+    page0.evaluate((deg) => {
+      window.__angle = 0;
+      if (screen.orientation) Object.defineProperty(screen.orientation, 'angle', { get: () => 0, configurable: true });
+      const ev = new Event('deviceorientation');
+      Object.defineProperty(ev, 'gamma', { value: deg });
+      Object.defineProperty(ev, 'beta', { value: 0 });
+      window.dispatchEvent(ev);
+      return window.__app.input.gyro.steer;
+    }, deg);
+
+  check((await page0.evaluate(() => window.__settings.get('gyro'))) === false, '設定の初期値がオフ');
+  check((await page0.evaluate(() => window.__app.input.gyro.enabled)) === false, '起動直後はジャイロが動いていない');
+  let v = 0;
+  for (let i = 0; i < 10; i++) v = await tilt0(40);
+  check(v === 0, `オフのあいだは傾けても曲がらない（${v}）`);
+
+  // 設定画面をひらいてスイッチを入れる
+  await page0.click('[data-mode=settings]');
+  await page0.waitForSelector('#st-gyro');
+  check((await page0.isChecked('#st-gyro')) === false, '設定画面のスイッチも切れている');
+  await page0.click('#st-gyro');
+  await page0.waitForTimeout(400);
+  check(await page0.evaluate(() => window.__app.input.gyro.enabled), 'スイッチを入れると動きだす');
+  check(await page0.evaluate(() => window.__settings.get('gyro')), '設定に保存される');
+  // 入れた直後の持ち方がまっすぐになる（古い値で基準を決めていないこと）
+  for (let i = 0; i < 15; i++) v = await tilt0(40);
+  check(Math.abs(v) < 0.05, `入れた直後の持ち方がまっすぐになる（${v.toFixed(3)}）`);
+  for (let i = 0; i < 15; i++) v = await tilt0(70);
+  check(v > 0.6, `そこから傾ければ曲がる（${v.toFixed(2)}）`);
+
+  // 切る
+  await page0.click('#st-gyro');
+  await page0.waitForTimeout(300);
+  check((await page0.evaluate(() => window.__app.input.gyro.enabled)) === false, 'スイッチを切ると止まる');
+  check((await page0.evaluate(() => window.__settings.get('gyro'))) === false, '切ったことも保存される');
+  for (let i = 0; i < 10; i++) v = await tilt0(70);
+  check(v === 0, `切ったあとは傾けても曲がらない（${v}）`);
+  check(errs0.length === 0, `JS エラーなし${errs0.length ? ': ' + errs0[0] : ''}`);
+  await ctx0.close();
+}
+
+// ---------- ジャイロを入れた状態での操作 ----------
 const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
 const page = await ctx.newPage();
 const errors = [];

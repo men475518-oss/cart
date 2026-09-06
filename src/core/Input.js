@@ -109,6 +109,9 @@ export class InputManager {
     this.gyro.needsCalibrate = false;
   }
   _onOrient(e) {
+    // リスナーを付けた直後は、中身が空のイベントが 1 回届くことがある。
+    // これを基準にしてしまうとハンドルが切れっぱなしになるので読み飛ばす
+    if (e.beta == null && e.gamma == null) return;
     const angle = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
     let tilt;
     if (angle === 90) tilt = e.beta ?? 0;
