@@ -13,6 +13,7 @@
     "check:pages": "node test/pages.mjs",
     "check:touch": "node test/steer.mjs",
     "check:drive": "node test/drive.mjs",
+    "check:voice": "node test/voicecheck.mjs",
     "worker:dev": "wrangler dev --port 8788",
     "worker:deploy": "wrangler deploy",
     "worker:test": "node test/worker.mjs",

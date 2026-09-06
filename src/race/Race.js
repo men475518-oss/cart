@@ -812,6 +812,8 @@ export class Race {
           if (isView) {
             const final = e.lap === this.laps;
             audio.sfx(final ? 'finalLap' : 'lap');
+            // ファイナルラップはキャラの気合いの声を重ねる（セリフはなく鳴き声だけ）
+            if (final) audio.voice(k.char, 'lap', { noSpeech: true, minInterval: 0 });
             for (const h of this._hudOf(k)) h.message(final ? 'FINAL LAP!' : `LAP ${e.lap}`, final ? 'final' : '', 1.6);
           }
           break;

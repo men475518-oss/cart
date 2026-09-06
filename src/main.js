@@ -364,4 +364,5 @@ class App {
 
 window.addEventListener('DOMContentLoaded', () => {
   window.__app = new App();
+  window.__audio = audio; // 動作確認用（test/voicecheck から鳴らして確かめる）
 });
