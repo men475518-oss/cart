@@ -5,6 +5,7 @@ const DEFAULTS = {
   playerName: '',
   bgmVolume: 0.6,
   sfxVolume: 0.9,
+  engineVolume: 0.7, // エンジン音。鳴りっぱなしなので効果音とは別に持つ
   voice: true,        // キャラクターボイス（音声合成）
   steerSensitivity: 1.0, // タッチのハンドルの効き（大きいほど少ない指の動きで曲がる）
   gyro: false,        // ジャイロ操作
