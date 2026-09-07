@@ -491,6 +491,7 @@ export function settingsScreen({ onBack, input }) {
         <label class="row"><span>プレイヤー名</span><input type="text" id="st-name" maxlength="12" value="${esc(s.get('playerName'))}"></label>
         <label class="row"><span>BGM 音量</span><input type="range" id="st-bgm" min="0" max="1" step="0.05" value="${s.get('bgmVolume')}"></label>
         <label class="row"><span>効果音 音量</span><input type="range" id="st-sfx" min="0" max="1" step="0.05" value="${s.get('sfxVolume')}"></label>
+        <label class="row"><span>エンジン音 音量</span><input type="range" id="st-engine" min="0" max="1" step="0.05" value="${s.get('engineVolume')}"></label>
         <label class="row"><span>キャラクターボイス（音声合成）</span><input type="checkbox" id="st-voice" ${s.get('voice') ? 'checked' : ''}></label>
         <h3>操作</h3>
         <div class="row"><span>ハンドルの効き</span><input type="range" id="st-steersens" min="0.6" max="1.8" step="0.1" value="${s.get('steerSensitivity')}"></div>
@@ -517,6 +518,10 @@ export function settingsScreen({ onBack, input }) {
   q('#st-name').addEventListener('change', () => s.set('playerName', q('#st-name').value.trim()));
   q('#st-bgm').addEventListener('input', () => {
     s.set('bgmVolume', Number(q('#st-bgm').value));
+    audio.applyVolumes();
+  });
+  q('#st-engine').addEventListener('input', () => {
+    s.set('engineVolume', Number(q('#st-engine').value));
     audio.applyVolumes();
   });
   q('#st-sfx').addEventListener('input', () => {

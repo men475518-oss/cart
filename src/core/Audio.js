@@ -105,6 +105,11 @@ function degreeToMidi(root, scale, deg) {
   return root + scale[idx] + oct * 12;
 }
 
+// エンジン音の大きさ。止まっているとき（ENGINE_IDLE）と、
+// アクセル・速度で増える分（ENGINE_RANGE）
+const ENGINE_IDLE = 0.028;
+const ENGINE_RANGE = 0.06;
+
 class AudioEngine {
   constructor() {
     this.ctx = null;
@@ -132,6 +137,9 @@ class AudioEngine {
     this.bgmGain.connect(this.master);
     this.sfxGain = this.ctx.createGain();
     this.sfxGain.connect(this.master);
+    // エンジン音は鳴りっぱなしなので、単発の効果音とは別に音量を持たせる
+    this.engineGain = this.ctx.createGain();
+    this.engineGain.connect(this.sfxGain);
     this.applyVolumes();
     this.enabled = true;
     // iOS: 無音を1回鳴らしてアンロック
@@ -151,6 +159,15 @@ class AudioEngine {
     if (!this.ctx) return;
     this.bgmGain.gain.value = settings.get('bgmVolume');
     this.sfxGain.gain.value = settings.get('sfxVolume');
+    this._applyEngineVolume();
+  }
+
+  /** エンジン音の音量。画面分割で台数が増えても足し算で大きくならないようにする */
+  _applyEngineVolume() {
+    if (!this.engineGain) return;
+    const n = Math.max(1, this.engines.length);
+    const setting = settings.get('engineVolume');
+    this.engineGain.gain.value = (setting === undefined ? 0.5 : setting) / Math.sqrt(n);
   }
 
   get now() {
@@ -367,21 +384,37 @@ class AudioEngine {
   }
 
   // ---------- エンジン音（プレイヤーごと） ----------
+  /**
+   * 走行中ずっと鳴る音なので、単発の効果音より小さく作る。
+   * のこぎり波はうなり、矩形波はざらつきを出すが、矩形波を強く出すと
+   * 耳につくので控えめにし、ローパスの上限も低めにしてやわらかくする。
+   */
   createEngine() {
     if (!this.enabled) return { update() {}, stop() {} };
     const ctx = this.ctx;
+    const dest = this.engineGain && this.engineGain.context === ctx ? this.engineGain : this.sfxGain;
     const g = ctx.createGain();
     g.gain.value = 0;
+    // 2 段のローパスでゆるやかに高域を落とす（1 段だとブザーっぽさが残る）
     const f = ctx.createBiquadFilter();
     f.type = 'lowpass';
     f.frequency.value = 500;
+    f.Q.value = 0.7;
+    const f2 = ctx.createBiquadFilter();
+    f2.type = 'lowpass';
+    f2.frequency.value = 1600;
+    f2.Q.value = 0.5;
     const o1 = ctx.createOscillator();
     o1.type = 'sawtooth';
+    const o1g = ctx.createGain();
+    o1g.gain.value = 1;
     const o2 = ctx.createOscillator();
     o2.type = 'square';
-    o1.connect(f);
-    o2.connect(f);
-    f.connect(g).connect(this.sfxGain);
+    const o2g = ctx.createGain();
+    o2g.gain.value = 0.35; // ざらつきは隠し味くらいに
+    o1.connect(o1g).connect(f);
+    o2.connect(o2g).connect(f);
+    f.connect(f2).connect(g).connect(dest);
     o1.start();
     o2.start();
     // ドリフトのスキール音
@@ -390,11 +423,11 @@ class AudioEngine {
     skid.loop = true;
     const sf = ctx.createBiquadFilter();
     sf.type = 'bandpass';
-    sf.frequency.value = 2200;
-    sf.Q.value = 1.5;
+    sf.frequency.value = 2000;
+    sf.Q.value = 1.2;
     const sg = ctx.createGain();
     sg.gain.value = 0;
-    skid.connect(sf).connect(sg).connect(this.sfxGain);
+    skid.connect(sf).connect(sg).connect(dest);
     skid.start();
     const eng = {
       update: (speedNorm, throttle, drifting, boosting) => {
@@ -402,9 +435,10 @@ class AudioEngine {
         const base = 55 + speedNorm * 150 + (boosting ? 40 : 0);
         o1.frequency.setTargetAtTime(base, now, 0.05);
         o2.frequency.setTargetAtTime(base / 2, now, 0.05);
-        f.frequency.setTargetAtTime(350 + speedNorm * 1500 + (boosting ? 800 : 0), now, 0.05);
-        g.gain.setTargetAtTime(0.05 + 0.08 * (0.35 + 0.65 * throttle) * (0.5 + speedNorm), now, 0.05);
-        sg.gain.setTargetAtTime(drifting ? 0.08 : 0, now, 0.05);
+        // 高域の開き方をおさえる。開きすぎるとブザーのように耳につく
+        f.frequency.setTargetAtTime(300 + speedNorm * 780 + (boosting ? 380 : 0), now, 0.05);
+        g.gain.setTargetAtTime(ENGINE_IDLE + ENGINE_RANGE * (0.35 + 0.65 * throttle) * (0.5 + speedNorm), now, 0.05);
+        sg.gain.setTargetAtTime(drifting ? 0.028 : 0, now, 0.05);
       },
       stop: () => {
         try {
@@ -421,12 +455,14 @@ class AudioEngine {
       },
     };
     this.engines.push(eng);
+    this._applyEngineVolume();
     return eng;
   }
 
   stopAllEngines() {
     for (const e of this.engines) e.stop();
     this.engines = [];
+    this._applyEngineVolume();
   }
 
   // ---------- BGM シーケンサ ----------
