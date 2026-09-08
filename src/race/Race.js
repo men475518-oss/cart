@@ -569,6 +569,16 @@ export class Race {
       if (lap !== s.lap) {
         const wasLap = s.lap;
         s.lap = lap;
+        if (lap > wasLap && lap > 1) {
+          // 1 周ぶんのタイム。タイムアタックのベストラップに使う
+          const split = this.time - (s.lapStart || 0);
+          s.lapStart = this.time;
+          if (split > 1) {
+            s.lapTimes = s.lapTimes || [];
+            s.lapTimes.push(split);
+            if (s.bestLap == null || split < s.bestLap) s.bestLap = split;
+          }
+        }
         if (lap > wasLap && lap > 1 && lap <= this.laps) this.events.push({ type: 'lap', kart: k, lap });
       }
       if (!s.finished && s.totalProgress >= this.laps * N) {
@@ -613,6 +623,7 @@ export class Race {
       char: k.char,
       kartOpts: k.kartOpts,
       time: k.state.finished ? k.state.finishTime : null,
+      bestLap: k.state.bestLap ?? null,
       isHuman: k.isHuman,
       isLocal: !k.remote,
       playerIndex: k.playerIndex,

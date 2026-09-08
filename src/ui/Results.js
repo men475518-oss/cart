@@ -51,7 +51,8 @@ function bannerTexture(course) {
 }
 
 export class ResultsScreen {
-  constructor({ renderer, root, results, course, onAction, online = false }) {
+  constructor({ renderer, root, results, course, onAction, online = false, cup = null, record = null }) {
+    this.cup = cup;
     this.renderer = renderer;
     this.results = results;
     this.onAction = onAction;
@@ -135,18 +136,21 @@ export class ResultsScreen {
     const rows = results
       .map((r) => {
         const tag = r.isHuman ? (r.playerIndex !== null && r.playerIndex !== undefined ? `P${r.playerIndex + 1}` : 'YOU') : online && !r.isLocal ? 'NET' : 'CPU';
-        return `<div class="res-row rank-${Math.min(r.rank, 4)}${r.isHuman ? ' me' : ''}"><span class="res-rank">${r.rank}</span><span class="res-char">${r.char.emoji}</span><span class="res-name">${escapeHtml(r.name)}</span><span class="res-tag">${tag}</span><span class="res-time">${r.time != null ? formatTime(r.time) : '--'}</span></div>`;
+        // グランプリの表彰式では、タイムのかわりに合計ポイントを出す
+        const right = cup ? `${r.points} <small>pt</small>` : r.time != null ? formatTime(r.time) : '--';
+        return `<div class="res-row rank-${Math.min(r.rank, 4)}${r.isHuman ? ' me' : ''}"><span class="res-rank">${r.rank}</span><span class="res-char">${r.char.emoji}</span><span class="res-name">${escapeHtml(r.name)}</span><span class="res-tag">${tag}</span><span class="res-time">${right}</span></div>`;
       })
       .join('');
     const winner = results[0];
     el.innerHTML = `
       <div class="results-panel">
-        <h2 class="results-title">🏁 レース結果</h2>
-        <div class="results-winner">${winner.char.emoji} <b>${escapeHtml(winner.name)}</b> の勝利！</div>
+        <h2 class="results-title">${cup ? `${cup.emoji} ${escapeHtml(cup.name)} 総合結果` : '🏁 レース結果'}</h2>
+        <div class="results-winner">${winner.char.emoji} <b>${escapeHtml(winner.name)}</b> ${cup ? 'が総合優勝！' : 'の勝利！'}</div>
+        ${record ? `<div class="results-record">${record}</div>` : ''}
         <div class="res-list">${rows}</div>
         <div class="btn-row">
-          <button class="btn primary" data-act="again">🔁 もう一度</button>
-          <button class="btn" data-act="course">🗺 ${online ? 'ロビーへ' : 'コース選択'}</button>
+          <button class="btn primary" data-act="again">${cup ? '🏆 カップをえらぶ' : '🔁 もう一度'}</button>
+          ${cup ? '' : `<button class="btn" data-act="course">🗺 ${online ? 'ロビーへ' : 'コース選択'}</button>`}
           <button class="btn" data-act="title">🏠 タイトル</button>
         </div>
       </div>`;

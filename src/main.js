@@ -3,14 +3,16 @@ import * as THREE from 'three';
 import './styles.css';
 import { settings } from './core/Settings.js';
 import { InputManager } from './core/Input.js';
-import { audio } from './core/Audio.js';
+import { audio, BGM_PATTERNS, makeLimiter } from './core/Audio.js';
 import { Race } from './race/Race.js';
 import { ResultsScreen } from './ui/Results.js';
 import * as UI from './ui/Screens.js';
 import { NetClient } from './net/NetClient.js';
 import { getCourse, COURSES } from './data/courses.js';
+import { getCup, pointsForRank, cupStandings } from './data/cups.js';
+import { getRecord, submitRecord } from './core/Records.js';
 import { CHARACTERS, getCharacter } from './data/characters.js';
-import { isTouchDevice } from './core/Utils.js';
+import { isTouchDevice, formatTime } from './core/Utils.js';
 
 function detectQuality() {
   const q = settings.get('quality');
@@ -41,6 +43,7 @@ class App {
     this.results = null;
     this.pauseEl = null;
     this.lastConfig = null;
+    this.gp = null; // グランプリ進行中の状態
     this.onlineStart = null;
     this.setup = { players: [], cpuFill: true, mode: 'single' };
     this._last = performance.now();
@@ -129,6 +132,9 @@ class App {
             case 'timeattack':
               this.showCharacter(0, 1);
               break;
+            case 'grandprix':
+              this.showCup();
+              break;
             case 'local':
               this.show(
                 UI.localSetupScreen({
@@ -173,11 +179,152 @@ class App {
             settings.set('lastKart', kart);
           }
           if (index + 1 < total) this.showCharacter(index + 1, total);
+          else if (this.setup.mode === 'grandprix') this.startGrandPrix();
           else this.showCourse();
         },
         onBack: () => (index > 0 ? this.showCharacter(index - 1, total) : this.showMode()),
       })
     );
+  }
+
+  // ---------- グランプリ ----------
+  showCup() {
+    this.show(
+      UI.cupScreen({
+        onSelect: (cupId) => {
+          this.setup = { players: [], cpuFill: true, mode: 'grandprix', cupId };
+          this.showCharacter(0, 1);
+        },
+        onBack: () => this.showMode(),
+      })
+    );
+  }
+
+  /** カップの出場者を決めて第 1 戦へ。8 人は最後まで同じ顔ぶれで走る */
+  startGrandPrix() {
+    const cup = getCup(this.setup.cupId);
+    const p0 = this.setup.players[0];
+    const humans = [
+      {
+        id: 'p0',
+        type: 'human',
+        playerIndex: 0,
+        charId: p0.charId,
+        kart: p0.kart,
+        name: settings.get('playerName') || getCharacter(p0.charId).name,
+      },
+    ];
+    const pool = CHARACTERS.filter((c) => c.id !== p0.charId);
+    const cpus = [];
+    for (let i = 0; i < 7; i++) {
+      const c = pool.length ? pool.splice(Math.floor(Math.random() * pool.length), 1)[0] : CHARACTERS[i % CHARACTERS.length];
+      cpus.push({
+        id: `ai${i}`,
+        type: 'ai',
+        charId: c.id,
+        name: c.name,
+        kart: {
+          color: 'default',
+          wheels: ['standard', 'offroad', 'slick', 'roller'][Math.floor(Math.random() * 4)],
+          accessory: ['none', 'flag', 'antenna', 'spoiler', 'roof'][Math.floor(Math.random() * 5)],
+        },
+      });
+    }
+    const players = [...cpus, ...humans];
+    this.gp = {
+      cup,
+      index: 0,
+      players,
+      entries: players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        char: getCharacter(p.charId),
+        kartOpts: p.kart,
+        isHuman: p.type === 'human',
+        points: 0,
+        finishes: [],
+      })),
+    };
+    this._startGpRace();
+  }
+
+  _startGpRace() {
+    const gp = this.gp;
+    const courseId = gp.cup.courses[gp.index];
+    this.lastConfig = {
+      courseId,
+      laps: getCourse(courseId).laps || 3,
+      players: gp.players,
+      seed: Math.floor(Math.random() * 1e9),
+    };
+    this.startRace(this.lastConfig);
+  }
+
+  /** 1 戦おわったのでポイントを足して、総合順位を見せる */
+  _finishGpRace(results) {
+    const gp = this.gp;
+    const byId = new Map(gp.entries.map((e) => [e.id, e]));
+    for (const r of results) {
+      const e = byId.get(r.id);
+      if (!e) continue;
+      e.gained = pointsForRank(r.rank);
+      e.points += e.gained;
+      e.finishes.push(r.rank);
+    }
+    const standings = cupStandings(gp.entries);
+    const last = gp.index >= gp.cup.courses.length - 1;
+    this.show(
+      UI.standingsScreen({
+        cup: gp.cup,
+        raceIndex: gp.index,
+        standings,
+        onNext: () => {
+          if (last) this._showCupCeremony(standings);
+          else {
+            gp.index++;
+            this._startGpRace();
+          }
+        },
+        onQuit: () => {
+          this.gp = null;
+          this.showTitle();
+        },
+      })
+    );
+    audio.playBgm('menu');
+  }
+
+  /** 最終戦のあとの表彰式。総合順位でもう一度 表彰台を出す */
+  _showCupCeremony(standings) {
+    const gp = this.gp;
+    const results = standings.map((e) => ({
+      id: e.id,
+      rank: e.rank,
+      name: e.name,
+      char: e.char,
+      kartOpts: e.kartOpts,
+      time: null,
+      points: e.points,
+      isHuman: e.isHuman,
+      isLocal: true,
+      playerIndex: e.isHuman ? 0 : null,
+    }));
+    this.hudRoot.innerHTML = '';
+    audio.stopBgm();
+    this.results = new ResultsScreen({
+      renderer: this.renderer,
+      root: this.uiRoot,
+      results,
+      course: getCourse(gp.cup.courses[gp.cup.courses.length - 1]),
+      cup: gp.cup,
+      onAction: (act) => {
+        this.gp = null;
+        if (act === 'again') this.showCup();
+        else if (act === 'course') this.showCup();
+        else this.showTitle();
+      },
+    });
+    this.resize();
   }
 
   showCourse() {
@@ -286,6 +433,14 @@ class App {
       this.race = null;
     }
     this.hudRoot.innerHTML = '';
+    // タイムアタックはベストタイムを残す
+    if (this.setup.mode === 'timeattack') this._saveTimeAttack(results, config);
+    // グランプリはポイントを足して総合順位へ
+    if (this.gp && !online) {
+      audio.stopBgm();
+      this._finishGpRace(results);
+      return;
+    }
     audio.stopBgm();
     this.results = new ResultsScreen({
       renderer: this.renderer,
@@ -293,6 +448,7 @@ class App {
       results,
       course: getCourse(config.courseId),
       online,
+      record: this._taRecordText(config),
       onAction: (act) => {
         if (online) {
           this._leaveRace();
@@ -308,6 +464,35 @@ class App {
       },
     });
     this.resize();
+  }
+
+  /** タイムアタックの記録を残す。更新できたらしらせる */
+  _saveTimeAttack(results, config) {
+    const me = results.find((r) => r.isHuman);
+    if (!me || me.time == null) return;
+    this._taRecord = submitRecord(config.courseId, config.laps, {
+      total: me.time,
+      lap: me.bestLap ?? null,
+      char: me.char.id,
+    });
+  }
+
+  /** リザルトに出すタイムアタックの記録の一行 */
+  _taRecordText(config) {
+    if (this.setup.mode !== 'timeattack') return null;
+    const rec = getRecord(config.courseId, config.laps);
+    if (!rec) return null;
+    const r = this._taRecord;
+    const marks = [];
+    if (r?.totalBest) marks.push('🎉 トータル更新！');
+    if (r?.lapBest) marks.push('⚡ ベストラップ更新！');
+    const best = [
+      rec.total != null ? `ベストタイム ${formatTime(rec.total)}` : null,
+      rec.lap != null ? `ベストラップ ${formatTime(rec.lap)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' / ');
+    return [marks.join(' '), best].filter(Boolean).join('<br>');
   }
 
   // ---------- オンライン ----------
@@ -369,4 +554,6 @@ window.addEventListener('DOMContentLoaded', () => {
   // 動作確認用。test/voicecheck から鳴らしたり、test/gyro から設定を切り替えたりする
   window.__audio = audio;
   window.__settings = settings;
+  window.__bgmPatterns = BGM_PATTERNS;
+  window.__makeLimiter = makeLimiter;
 });

@@ -1,6 +1,7 @@
-// 追加した 2 ステージの検証。
+// 追加したステージの検証。
 //  - めぐりめぐる遺跡: 1 周ごとに景色（空・地面・路面・ライト）がまるごと入れかわる
 //  - からくり工場: しかけが置かれ、実際に動いている
+//  - レインボーロード: 路面が虹色に変わり、宇宙に浮いた一本道になっている
 // 実行: npm run check:stages
 import { launchChromium } from './browser.mjs';
 
@@ -77,11 +78,12 @@ async function enter(page, courseId) {
 
   // 実際に周回すると切り替わること（ラップイベント経由）
   await page.evaluate(() => window.__app.race._setTheme(0));
+  // イベントは描画ループで処理されるので、切り替わるまで待つ（決め打ちの待ち時間だとたまに落ちる）
   const after = await page.evaluate(async () => {
     const r = window.__app.race;
     const k = r.karts.find((x) => x.isHuman);
     r.events.push({ type: 'lap', kart: k, lap: 1 });
-    await new Promise((res) => setTimeout(res, 300));
+    for (let i = 0; i < 120 && r.themeIndex === 0; i++) await new Promise((res) => requestAnimationFrame(res));
     return r.themeIndex;
   });
   check(after === 1, `1 周まわると次の景色に変わる（${after}）`);
@@ -150,6 +152,109 @@ async function enter(page, courseId) {
   await ctx.close();
 }
 
+// ---------- レインボーロード ----------
+{
+  console.log('■ レインボーロード（宇宙に浮いた虹の道）');
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  await page.addInitScript(() => localStorage.setItem('mofukart.settings.v1', JSON.stringify({ bgmVolume: 0, sfxVolume: 0, voice: false })));
+  await enter(page, 'rainbow');
+
+  const info = await page.evaluate(() => {
+    const r = window.__app.race;
+    const sc = r.sceneries[r.themeIndex];
+    const road = sc.mesh.getObjectByName('road');
+    // RGB -> HSL（THREE を持ちこまずにページ内で計算する）
+    const hsl = (rr, gg, bb) => {
+      const mx = Math.max(rr, gg, bb), mn = Math.min(rr, gg, bb), l = (mx + mn) / 2, d = mx - mn;
+      if (d === 0) return { h: 0, s: 0, l };
+      const s2 = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      let h = 0;
+      if (mx === rr) h = ((gg - bb) / d + (gg < bb ? 6 : 0)) / 6;
+      else if (mx === gg) h = ((bb - rr) / d + 2) / 6;
+      else h = ((rr - gg) / d + 4) / 6;
+      return { h, s: s2, l };
+    };
+    const col = road.geometry.getAttribute('color');
+    const hues = [];
+    const lights = [];
+    for (let i = 0; i < col.count; i += Math.max(1, Math.floor(col.count / 400))) {
+      const c = hsl(col.getX(i), col.getY(i), col.getZ(i));
+      if (c.s > 0.3) hues.push(c.h);
+      lights.push(c.l);
+    }
+    // 手すりの色（真っ黒だと宇宙で道のふちが見えない）
+    let railMin = 1;
+    const railSet = new Set();
+    sc.mesh.traverse((o) => {
+      if (!o.isInstancedMesh || !o.instanceColor) return;
+      const a = o.instanceColor.array;
+      for (let i = 0; i < o.count; i++) {
+        const c = hsl(a[i * 3], a[i * 3 + 1], a[i * 3 + 2]);
+        railMin = Math.min(railMin, c.l);
+        railSet.add(Math.round(c.h * 12));
+      }
+    });
+    const names = [];
+    sc.mesh.traverse((o) => o.name && names.push(o.name));
+    let ground = false;
+    sc.group.traverse((o) => {
+      if (o.geometry?.type === 'PlaneGeometry' && o.geometry.parameters?.width >= 2000 && o.visible) ground = true;
+    });
+    return {
+      hueBuckets: new Set(hues.map((h) => Math.round(h * 10))).size,
+      minLight: lights.length ? Math.min(...lights) : 0,
+      railMin,
+      railHues: railSet.size,
+      names,
+      ground,
+    };
+  });
+  check(info.hueBuckets >= 8, `路面の色が道にそって虹色に変わる（${info.hueBuckets} 色）`);
+  check(info.minLight > 0.15, `路面が真っ黒な場所はない（いちばん暗くて ${info.minLight.toFixed(2)}）`);
+  check(info.railMin > 0.2, `手すりが光っている（いちばん暗くて ${info.railMin.toFixed(2)}）`);
+  check(info.railHues >= 4, `手すりも虹色になっている（${info.railHues} 色）`);
+  for (const n of ['shoulder', 'wall', 'skirt']) {
+    check(!info.names.includes(n), `宇宙なので ${n} の板は出さない`);
+  }
+  check(!info.ground, '足もとに地面を敷かない');
+
+  // 画面に実際に何色も出ていること（描画まで通っているかの確認）
+  const shot = await page.screenshot({ type: 'png' });
+  const px = await page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    await img.decode();
+    const cv = document.createElement('canvas');
+    cv.width = img.width;
+    cv.height = img.height;
+    const c2 = cv.getContext('2d');
+    c2.drawImage(img, 0, 0);
+    const d = c2.getImageData(0, 0, cv.width, cv.height).data;
+    const buckets = new Set();
+    let bright = 0;
+    for (let i = 0; i < d.length; i += 4 * 37) {
+      const r = d[i] / 255, g = d[i + 1] / 255, bl = d[i + 2] / 255;
+      const mx = Math.max(r, g, bl), mn = Math.min(r, g, bl);
+      if (mx < 0.35 || mx - mn < 0.2) continue;
+      bright++;
+      let h = 0;
+      if (mx === r) h = ((g - bl) / (mx - mn) + 6) % 6;
+      else if (mx === g) h = (bl - r) / (mx - mn) + 2;
+      else h = (r - g) / (mx - mn) + 4;
+      buckets.add(Math.round(h));
+    }
+    return { buckets: buckets.size, bright };
+  }, shot.toString('base64'));
+  check(px.bright > 200, `画面が真っ暗ではない（色のついた点 ${px.bright}）`);
+  check(px.buckets >= 4, `画面に何色も出ている（${px.buckets} 色）`);
+  check(errors.length === 0, `JS エラーなし${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 await browser.close();
-console.log(failures === 0 ? '\n✅ 追加した 2 ステージ OK' : `\n❌ ${failures} 件の問題`);
+console.log(failures === 0 ? '\n✅ 追加した 3 ステージ OK' : `\n❌ ${failures} 件の問題`);
 process.exit(failures ? 1 : 0);

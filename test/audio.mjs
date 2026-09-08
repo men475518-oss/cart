@@ -59,6 +59,55 @@ const rows = await page.evaluate(async () => {
   out.sfxItem = await measure(async () => audio.sfx('itemGet'));
   out.sfxShell = await measure(async () => audio.sfx('shell'));
   out.sfxBoost = await measure(async () => audio.sfx('boost'));
+
+  // BGM を 1 曲ぶん書き出して測る。シーケンサは時計を見て先の音を並べるので、
+  // 時計を自分で進めながら _schedule() を呼んで 4 小節ぶんを詰めこむ
+  const bgm = {};
+  for (const [id, def] of Object.entries(window.__bgmPatterns)) {
+    const sec = 4;
+    const off = new OfflineAudioContext(1, 44100 * sec, 44100);
+    const clock = {
+      _t: 0,
+      get currentTime() {
+        return this._t;
+      },
+      sampleRate: off.sampleRate,
+      destination: off.destination,
+      state: 'running',
+      createGain: () => off.createGain(),
+      createOscillator: () => off.createOscillator(),
+      createBiquadFilter: () => off.createBiquadFilter(),
+      createBufferSource: () => off.createBufferSource(),
+      createBuffer: (a, b, c) => off.createBuffer(a, b, c),
+      createDelay: (a) => off.createDelay(a),
+      createDynamicsCompressor: () => off.createDynamicsCompressor(),
+      resume: () => Promise.resolve(),
+      suspend: () => Promise.resolve(),
+    };
+    audio.ctx = clock;
+    audio._noiseBuf = null;
+    // 本番と同じ出口をつなぐ。音量つまみを最大（1.0）にしても
+    // リミッターごしで割れないことを見たいので、そこで測る
+    const limiter = window.__makeLimiter(clock);
+    limiter.connect(off.destination);
+    const g = off.createGain();
+    g.gain.value = 1;
+    g.connect(limiter);
+    audio.bgm = { id, def, gain: g, step: 0, nextTime: 0, tempoMult: 1, timer: null };
+    for (let t = 0; t < sec; t += 0.05) {
+      clock._t = t;
+      audio._schedule();
+    }
+    const d = (await off.startRendering()).getChannelData(0);
+    let sq = 0;
+    let peak = 0;
+    for (let i = 0; i < d.length; i++) {
+      sq += d[i] * d[i];
+      peak = Math.max(peak, Math.abs(d[i]));
+    }
+    bgm[id] = { rms: Math.sqrt(sq / d.length), peak };
+  }
+  out.__bgm = bgm;
   audio.ctx = real.ctx;
   audio.sfxGain = real.sfx;
   audio.bgmGain = real.bgm;
@@ -68,9 +117,24 @@ const rows = await page.evaluate(async () => {
   return out;
 });
 
+const bgmRows = rows.__bgm;
+delete rows.__bgm;
+
 const f = (v) => v.toFixed(4).padStart(8);
 console.log('■ 音の大きさ（RMS = 平均 / ピーク = 最大）');
 for (const [k, v] of Object.entries(rows)) console.log('  ', k.padEnd(12), 'RMS', f(v.rms), ' ピーク', v.peak.toFixed(3).padStart(7));
+
+console.log('■ BGM');
+for (const [k, v] of Object.entries(bgmRows)) console.log('  ', k.padEnd(12), 'RMS', f(v.rms), ' ピーク', v.peak.toFixed(3).padStart(7));
+for (const [k, v] of Object.entries(bgmRows)) {
+  check(v.rms > 0.02, `BGM ${k} がちゃんと鳴っている（RMS ${v.rms.toFixed(4)} > 0.02）`);
+  check(v.peak <= 1, `BGM ${k} が音量最大でも割れない（ピーク ${v.peak.toFixed(2)} ≦ 1.00）`);
+}
+const bgmVals = Object.values(bgmRows).map((v) => v.rms);
+check(
+  Math.max(...bgmVals) / Math.min(...bgmVals) < 3,
+  `曲どうしの音量がそろっている（いちばん大きい曲がいちばん小さい曲の ${(Math.max(...bgmVals) / Math.min(...bgmVals)).toFixed(1)} 倍 / 3 倍未満）`
+);
 
 // エンジンは鳴りっぱなしなので、単発の効果音より前に出てはいけない
 const sfxPeak = Math.max(rows.sfxItem.peak, rows.sfxShell.peak, rows.sfxBoost.peak);

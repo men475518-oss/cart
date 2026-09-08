@@ -64,6 +64,16 @@ function fakeContext() {
       return n;
     },
     createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }),
+    createDelay: () => {
+      const n = mk('delay');
+      n.delayTime = makeParam(log, 'delay', 'delayTime', 0);
+      return n;
+    },
+    createDynamicsCompressor: () => {
+      const n = mk('compressor');
+      for (const k of ['threshold', 'knee', 'ratio', 'attack', 'release']) n[k] = makeParam(log, 'compressor', k, 0);
+      return n;
+    },
   };
   return { ctx, log, nodes };
 }

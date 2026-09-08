@@ -81,8 +81,9 @@ export function buildScenery(track, course, quality = 'high') {
 
   group.add(skyDome(pal.skyTop, pal.skyBottom));
 
-  // 地面
+  // 地面。宇宙コースは足もとが虚空なので敷かない
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), toonMat(pal.ground, { map: groundTexture(3) }));
+  ground.visible = course.theme !== 'space';
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = groundY;
   ground.receiveShadow = true;
@@ -96,7 +97,7 @@ export function buildScenery(track, course, quality = 'high') {
   // 太陽 / 月
   const sun = new THREE.Mesh(new THREE.SphereGeometry(28, 16, 12), new THREE.MeshBasicMaterial({ color: pal.night ? 0xfff6c8 : 0xfff2a8, fog: false }));
   sun.position.set(300, 380, -520);
-  group.add(sun);
+  if (course.theme !== 'space') group.add(sun);
 
   const anim = []; // 毎フレーム更新するアニメーション関数 (dt, camPos, time)
   const theme = course.theme;
@@ -466,6 +467,173 @@ export function buildScenery(track, course, quality = 'high') {
       addInstance(props, a.x, a.y + 0.9, a.z, 0, 1, 1.8);
     }
     group.add(pipes, props);
+  } else if (theme === 'space') {
+    // 宇宙: 星・流れ星・惑星・道ぞいに浮かぶ光の柱
+    const starGeo = new THREE.BufferGeometry();
+    const SN = quality === 'low' ? 900 : 2200;
+    const sp = new Float32Array(SN * 3);
+    const sc = new Float32Array(SN * 3);
+    const _c = new THREE.Color();
+    for (let i = 0; i < SN; i++) {
+      // 球面にばらまく（遠くの星空）
+      const th = rng.range(0, Math.PI * 2);
+      const ph = Math.acos(rng.range(-1, 1));
+      const r = rng.range(700, 1100);
+      sp[i * 3] = Math.sin(ph) * Math.cos(th) * r;
+      sp[i * 3 + 1] = Math.abs(Math.cos(ph)) * r * 0.7 - 100;
+      sp[i * 3 + 2] = Math.sin(ph) * Math.sin(th) * r;
+      _c.setHSL(rng.range(0, 1), rng.range(0, 0.5), rng.range(0.7, 1));
+      sc.set([_c.r, _c.g, _c.b], i * 3);
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    starGeo.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ size: 4.5, vertexColors: true, sizeAttenuation: true, fog: false }));
+    stars.frustumCulled = false;
+    group.add(stars);
+    anim.push((dt) => {
+      stars.rotation.y += dt * 0.006;
+    });
+
+    // 遠くのネビュラ（ぼんやり光る雲）。ふちがはっきりした円だとシミに見えるので、
+    // 中心から外へ透明になっていくテクスチャで柔らかくぼかす
+    const nebTex = (() => {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 128;
+      const c = cv.getContext('2d');
+      const g = c.createRadialGradient(64, 64, 0, 64, 64, 64);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+      g.addColorStop(0.7, 'rgba(255,255,255,0.12)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = g;
+      c.fillRect(0, 0, 128, 128);
+      const t = new THREE.CanvasTexture(cv);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    })();
+    for (let i = 0; i < 5; i++) {
+      const neb = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: nebTex,
+          color: new THREE.Color().setHSL(rng.range(0, 1), 0.9, 0.55),
+          transparent: true,
+          opacity: 0.5,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          fog: false,
+        })
+      );
+      const w = rng.range(320, 620);
+      neb.scale.set(w, w * rng.range(0.5, 0.8), 1);
+      const a = rng.range(0, Math.PI * 2);
+      neb.position.set(Math.cos(a) * 950, rng.range(80, 400), Math.sin(a) * 950);
+      neb.lookAt(0, 140, 0);
+      neb.renderOrder = -1;
+      group.add(neb);
+    }
+
+    // 惑星。コースの真上や近くに来ると視界をふさぐので、遠く・高くに置く
+    const planetColors = [0xff7ab8, 0x7ad7ff, 0xffd166, 0x9d7bff, 0x7bffb0];
+    for (let i = 0; i < 6; i++) {
+      const rad = rng.range(26, 60);
+      const pl = new THREE.Mesh(
+        new THREE.SphereGeometry(rad, 20, 14),
+        new THREE.MeshBasicMaterial({ color: planetColors[i % planetColors.length], fog: false })
+      );
+      const a = (i / 6) * Math.PI * 2 + rng.range(-0.3, 0.3);
+      const d = rng.range(620, 900);
+      pl.position.set(Math.cos(a) * d, rng.range(140, 340), Math.sin(a) * d - 60);
+      group.add(pl);
+      if (i % 2 === 0) {
+        // 輪のある惑星
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(rad * 1.7, rad * 0.12, 8, 32),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, fog: false })
+        );
+        ring.position.copy(pl.position);
+        ring.rotation.set(rng.range(0.6, 1.2), rng.range(0, 3), 0);
+        group.add(ring);
+      }
+    }
+
+    // 道ぞいのネオンの光柱。太い板だと壁に見えるので、細くして加算合成で光らせる
+    const spireStep = quality === 'low' ? 12 : 8;
+    const spireCount = Math.ceil(track.N / spireStep) * 2;
+    const spires = instanced(
+      new THREE.CylinderGeometry(0.12, 0.22, 1, 6),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+      }),
+      spireCount
+    );
+    const spireColor = new THREE.Color();
+    const turns = pal.rainbowTurns || 3;
+    let pi = 0;
+    for (let i = 0; i < track.N; i += spireStep) {
+      const smp = track.samples[i];
+      const h = 5 + ((i * 7) % 5);
+      for (const side of [-1, 1]) {
+        // 道のふちから少し離して、路面にかぶらないようにする
+        const p = smp.pos.clone().addScaledVector(smp.right, side * (track.wallDist + 2.6));
+        addInstance(spires, p.x, p.y + h * 0.5 - 0.4, p.z, smp.heading, 1, h);
+        spireColor.setHSL((((i / track.N) * turns) % 1 + 1) % 1, 0.95, 0.6);
+        spires.setColorAt(pi, spireColor);
+        pi++;
+      }
+    }
+    if (spires.instanceColor) spires.instanceColor.needsUpdate = true;
+    group.add(spires);
+
+    // 光柱のてっぺんで光る玉。ゆっくり上下させて奥行きを出す
+    const orbs = instanced(
+      new THREE.SphereGeometry(0.45, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+      spireCount
+    );
+    let oi = 0;
+    for (let i = 0; i < track.N; i += spireStep) {
+      const smp = track.samples[i];
+      const h = 5 + ((i * 7) % 5);
+      for (const side of [-1, 1]) {
+        const p = smp.pos.clone().addScaledVector(smp.right, side * (track.wallDist + 2.6));
+        addInstance(orbs, p.x, p.y + h, p.z, 0, 1 + ((i * 3) % 3) * 0.25);
+        spireColor.setHSL((((i / track.N) * turns + 0.5) % 1 + 1) % 1, 0.95, 0.7);
+        orbs.setColorAt(oi, spireColor);
+        oi++;
+      }
+    }
+    if (orbs.instanceColor) orbs.instanceColor.needsUpdate = true;
+    group.add(orbs);
+    anim.push((dt, _c, t) => {
+      orbs.position.y = Math.sin(t * 1.1) * 0.6;
+    });
+
+    // 流れ星
+    const shooting = instanced(new THREE.SphereGeometry(1, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), 30);
+    group.add(shooting);
+    const shots = Array.from({ length: 6 }, () => ({ t: rng.range(0, 1), a: rng.range(0, Math.PI * 2), y: rng.range(120, 320) }));
+    anim.push((dt) => {
+      shooting.count = 0;
+      for (const sh of shots) {
+        sh.t += dt * 0.09;
+        if (sh.t > 1) {
+          sh.t = 0;
+          sh.a = Math.random() * Math.PI * 2;
+          sh.y = 120 + Math.random() * 200;
+        }
+        const d = 620;
+        const x = Math.cos(sh.a) * d + sh.t * 420;
+        const z = Math.sin(sh.a) * d - sh.t * 260;
+        for (let k = 0; k < 5; k++) addInstance(shooting, x - k * 9, sh.y - k * 4, z + k * 6, 0, 2.4 - k * 0.4);
+      }
+      shooting.instanceMatrix.needsUpdate = true;
+    });
   }
 
   // 共通: スタート付近の風船
