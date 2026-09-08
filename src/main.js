@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import './styles.css';
 import { settings } from './core/Settings.js';
 import { InputManager } from './core/Input.js';
-import { audio, BGM_PATTERNS } from './core/Audio.js';
+import { audio, BGM_PATTERNS, makeLimiter } from './core/Audio.js';
 import { Race } from './race/Race.js';
 import { ResultsScreen } from './ui/Results.js';
 import * as UI from './ui/Screens.js';
@@ -555,4 +555,5 @@ window.addEventListener('DOMContentLoaded', () => {
   window.__audio = audio;
   window.__settings = settings;
   window.__bgmPatterns = BGM_PATTERNS;
+  window.__makeLimiter = makeLimiter;
 });

@@ -112,6 +112,20 @@ const BGM = {
   },
 };
 
+/**
+ * クリップ防止のソフトリミッター。閾値を少し下げて軽く押さえるだけにして、
+ * 音がつぶれてのっぺりしないようにする
+ */
+export function makeLimiter(ctx) {
+  const c = ctx.createDynamicsCompressor();
+  c.threshold.value = -3;
+  c.knee.value = 3;
+  c.ratio.value = 12;
+  c.attack.value = 0.003;
+  c.release.value = 0.15;
+  return c;
+}
+
 function degreeToMidi(root, scale, deg) {
   const n = scale.length;
   const oct = Math.floor(deg / n);
@@ -146,7 +160,11 @@ class AudioEngine {
     if (!AC) return;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.connect(this.ctx.destination);
+    // BGM・効果音・エンジン音がぜんぶ重なると 1.0 を超えて音が割れる。
+    // 出口にソフトリミッターを置いてならす
+    this.limiter = makeLimiter(this.ctx);
+    this.master.connect(this.limiter);
+    this.limiter.connect(this.ctx.destination);
     this.bgmGain = this.ctx.createGain();
     this.bgmGain.connect(this.master);
     this.sfxGain = this.ctx.createGain();
@@ -193,7 +211,13 @@ class AudioEngine {
     const len = this.ctx.sampleRate * 1.5;
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    // ホワイトノイズは決め打ちの種から作る。Math.random() だと起動のたびに
+    // ドラムやスキール音のピークが変わり、音量の測定値が毎回ぶれてしまう
+    let seed = 0x9e3779b9;
+    for (let i = 0; i < len; i++) {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      d[i] = (seed / 0x80000000) - 1;
+    }
     this._noiseBuf = buf;
     return buf;
   }

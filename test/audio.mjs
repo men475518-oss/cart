@@ -80,13 +80,19 @@ const rows = await page.evaluate(async () => {
       createBufferSource: () => off.createBufferSource(),
       createBuffer: (a, b, c) => off.createBuffer(a, b, c),
       createDelay: (a) => off.createDelay(a),
+      createDynamicsCompressor: () => off.createDynamicsCompressor(),
       resume: () => Promise.resolve(),
       suspend: () => Promise.resolve(),
     };
     audio.ctx = clock;
     audio._noiseBuf = null;
+    // 本番と同じ出口をつなぐ。音量つまみを最大（1.0）にしても
+    // リミッターごしで割れないことを見たいので、そこで測る
+    const limiter = window.__makeLimiter(clock);
+    limiter.connect(off.destination);
     const g = off.createGain();
-    g.connect(off.destination);
+    g.gain.value = 1;
+    g.connect(limiter);
     audio.bgm = { id, def, gain: g, step: 0, nextTime: 0, tempoMult: 1, timer: null };
     for (let t = 0; t < sec; t += 0.05) {
       clock._t = t;
@@ -122,7 +128,7 @@ console.log('■ BGM');
 for (const [k, v] of Object.entries(bgmRows)) console.log('  ', k.padEnd(12), 'RMS', f(v.rms), ' ピーク', v.peak.toFixed(3).padStart(7));
 for (const [k, v] of Object.entries(bgmRows)) {
   check(v.rms > 0.02, `BGM ${k} がちゃんと鳴っている（RMS ${v.rms.toFixed(4)} > 0.02）`);
-  check(v.peak < 1.2, `BGM ${k} が割れていない（ピーク ${v.peak.toFixed(2)} < 1.2）`);
+  check(v.peak <= 1, `BGM ${k} が音量最大でも割れない（ピーク ${v.peak.toFixed(2)} ≦ 1.00）`);
 }
 const bgmVals = Object.values(bgmRows).map((v) => v.rms);
 check(
