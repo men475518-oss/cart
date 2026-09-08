@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { CHARACTERS, getCharacter } from '../data/characters.js';
 import { COURSES, getCourse } from '../data/courses.js';
+import { CUPS } from '../data/cups.js';
 import { ITEMS } from '../data/items.js';
 import { KART_COLORS, KART_WHEELS, KART_ACCESSORIES, DEFAULT_KART } from '../data/kartParts.js';
 import { buildKartModel } from '../race/KartModel.js';
@@ -118,6 +119,7 @@ export function modeScreen({ onSelect }) {
     <div class="screen menu-screen">
       <h2 class="screen-title">モードをえらぶ</h2>
       <div class="mode-grid">
+        <button class="mode-card" data-mode="grandprix"><span class="mode-icon">🏆</span><b>グランプリ</b><small>連戦してポイントで総合優勝をねらう</small></button>
         <button class="mode-card" data-mode="single"><span class="mode-icon">🏁</span><b>ひとりで遊ぶ</b><small>CPU 7人と対戦（最大8人）</small></button>
         <button class="mode-card" data-mode="local"><span class="mode-icon">👥</span><b>ローカル対戦</b><small>1台の端末で画面分割 2〜4人</small></button>
         <button class="mode-card" data-mode="online"><span class="mode-icon">🌐</span><b>オンライン対戦</b><small>プライベート / カジュアル / 観戦 / LAN</small></button>
@@ -479,6 +481,63 @@ export function onlineScreen({ net, profile, onRace, onBack, onEditProfile }) {
       for (const u of unsubs) u();
     },
   };
+}
+
+// ---------- カップ選択（グランプリ） ----------
+export function cupScreen({ onSelect, onBack }) {
+  const el = h(`
+    <div class="screen cup-screen">
+      <h2 class="screen-title">🏆 カップをえらぶ</h2>
+      <p class="hint">えらんだカップのコースを順ばんに走ります。順位に応じてポイントがもらえて、合計がいちばん多い人が総合優勝！</p>
+      <div class="cup-grid">
+        ${CUPS.map(
+          (c) => `<button class="cup-card" data-id="${c.id}">
+            <div class="cup-head"><span class="cup-emoji">${c.emoji}</span><b>${c.name}</b><span class="stars">${'★'.repeat(c.difficulty)}${'☆'.repeat(5 - c.difficulty)}</span></div>
+            <small>${c.desc}</small>
+            <ol class="cup-courses">${c.courses.map((id) => `<li>${getCourse(id).emoji} ${getCourse(id).name}</li>`).join('')}</ol>
+          </button>`
+        ).join('')}
+      </div>
+      <div class="btn-row"><button class="btn" data-act="back">← もどる</button></div>
+    </div>`);
+  click(el, '.cup-card', (b) => {
+    audio.sfx('select');
+    onSelect(b.dataset.id);
+  });
+  click(el, '[data-act=back]', () => onBack());
+  return { el, dispose() {} };
+}
+
+// ---------- グランプリの総合順位 ----------
+export function standingsScreen({ cup, raceIndex, standings, onNext, onQuit }) {
+  const last = raceIndex >= cup.courses.length - 1;
+  const next = last ? null : getCourse(cup.courses[raceIndex + 1]);
+  const el = h(`
+    <div class="screen standings-screen">
+      <h2 class="screen-title">${cup.emoji} ${cup.name} <small class="gp-progress">${raceIndex + 1} / ${cup.courses.length} 戦おわり</small></h2>
+      <div class="panel standings-panel">
+        <div class="std-list">
+          ${standings
+            .map(
+              (e) => `<div class="std-row rank-${Math.min(e.rank, 4)}${e.isHuman ? ' me' : ''}">
+                <span class="std-rank">${e.rank}</span>
+                <span class="std-char">${e.char.emoji}</span>
+                <span class="std-name">${esc(e.name)}</span>
+                <span class="std-gain">${e.gained != null ? `+${e.gained}` : ''}</span>
+                <span class="std-points">${e.points} <small>pt</small></span>
+              </div>`
+            )
+            .join('')}
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary big" data-act="next">${last ? '🏆 表彰式へ' : `▶ つぎは ${next.emoji} ${next.name}`}</button>
+        <button class="btn" data-act="quit">やめる</button>
+      </div>
+    </div>`);
+  click(el, '[data-act=next]', () => onNext());
+  click(el, '[data-act=quit]', () => onQuit());
+  return { el, dispose() {} };
 }
 
 // ---------- 設定 ----------

@@ -191,6 +191,31 @@ input[type=checkbox] { width: 22px; height: 22px; }
   .results-panel { width: min(46vw, 480px); max-height: 92vh; }
 }
 
+/* ===== カップ選択・グランプリ総合順位 ===== */
+.cup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; width: min(100%, 760px); }
+.cup-card { border: 3px solid transparent; border-radius: var(--radius); background: var(--panel); padding: 14px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; text-align: left; box-shadow: 0 5px 0 rgba(0,0,0,0.12); }
+.cup-card:active { transform: scale(0.98); }
+.cup-head { display: flex; align-items: center; gap: 8px; }
+.cup-emoji { font-size: 30px; }
+.cup-head b { font-size: 19px; }
+.cup-head .stars { margin-left: auto; color: var(--yellow); font-size: 13px; letter-spacing: 1px; }
+.cup-card small { color: var(--ink-soft); line-height: 1.5; }
+.cup-courses { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.gp-progress { font-size: 14px; opacity: 0.85; font-weight: 700; }
+.standings-panel { width: min(100%, 560px); max-height: 62vh; overflow: auto; }
+.std-list { display: flex; flex-direction: column; gap: 4px; }
+.std-row { display: grid; grid-template-columns: 34px 30px 1fr 44px 70px; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 12px; background: rgba(0,0,0,0.04); }
+.std-row.me { outline: 2px solid var(--pink); }
+.std-row.rank-1 { background: rgba(255,210,63,0.28); }
+.std-row.rank-2 { background: rgba(207,216,220,0.34); }
+.std-row.rank-3 { background: rgba(205,127,50,0.24); }
+.std-rank { font-size: 20px; font-weight: 900; text-align: center; }
+.std-char { font-size: 20px; }
+.std-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.std-gain { color: var(--green); font-weight: 900; font-size: 13px; text-align: right; }
+.std-points { font-weight: 900; text-align: right; }
+.results-record { font-size: 13px; color: var(--ink-soft); line-height: 1.6; }
+
 /* ===== HUD ===== */
 .hud { position: absolute; pointer-events: none; overflow: hidden; font-weight: 900; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.35), 0 0 8px rgba(0,0,0,0.25); }
 .hud.flip { transform: rotate(180deg); }
