@@ -13,9 +13,9 @@ export const CUPS = [
     id: 'star',
     name: 'スターカップ',
     emoji: '⭐',
-    desc: 'むずかしい 3 コース。しかけだらけの工場が最終戦',
+    desc: 'むずかしい 4 コース。最終戦は宇宙にかかるレインボーロード',
     difficulty: 5,
-    courses: ['volcano', 'city', 'factory'],
+    courses: ['volcano', 'city', 'factory', 'rainbow'],
   },
 ];
 

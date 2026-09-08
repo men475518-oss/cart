@@ -188,11 +188,20 @@ test('光の輪をくぐるとダッシュできる', () => {
   assert.equal(k.state.boostTime, 0, '連続で効いてしまう');
 });
 
-test('しかけのないコースでは何も作られない', () => {
-  for (const c of COURSES.filter((x) => x.id !== 'factory')) {
+test('しかけを置いていないコースでは何も作られない', () => {
+  for (const c of COURSES.filter((x) => !(x.gimmicks || []).length)) {
     const t2 = new Track(c);
     const sys = new GimmickSystem({ track: t2, scene: stubScene, karts: [], events: [], particles: stubParticles, course: c });
     assert.equal(sys.items.length, 0, `${c.id} にしかけができている`);
+  }
+});
+
+test('しかけを置いたコースではその数だけ作られる', () => {
+  for (const c of COURSES.filter((x) => (x.gimmicks || []).length)) {
+    const t2 = new Track(c);
+    const sys = new GimmickSystem({ track: t2, scene: stubScene, karts: [], events: [], particles: stubParticles, course: c });
+    assert.equal(sys.items.length, c.gimmicks.length, `${c.id} のしかけの数が合わない`);
+    for (const g of sys.items) assert.ok(g.node, `${c.id} のしかけに見た目がない`);
   }
 });
 

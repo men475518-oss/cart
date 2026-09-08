@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import './styles.css';
 import { settings } from './core/Settings.js';
 import { InputManager } from './core/Input.js';
-import { audio } from './core/Audio.js';
+import { audio, BGM_PATTERNS } from './core/Audio.js';
 import { Race } from './race/Race.js';
 import { ResultsScreen } from './ui/Results.js';
 import * as UI from './ui/Screens.js';
@@ -554,4 +554,5 @@ window.addEventListener('DOMContentLoaded', () => {
   // 動作確認用。test/voicecheck から鳴らしたり、test/gyro から設定を切り替えたりする
   window.__audio = audio;
   window.__settings = settings;
+  window.__bgmPatterns = BGM_PATTERNS;
 });

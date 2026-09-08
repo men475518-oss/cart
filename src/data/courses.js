@@ -272,6 +272,48 @@ export const COURSES = [
       shoulder: 0x5a5e66, wall: 0x8a8f99, hemiSky: 0xcdd8e6, hemiGround: 0x5a5e66, sun: 0xfff4e0, sunIntensity: 1.45,
     },
   },
+  {
+    id: 'rainbow',
+    name: 'レインボーロード',
+    emoji: '🌈',
+    desc: '宇宙にかかる虹の道。ふちは光る手すりだけ、外は星の海。ダッシュ板とリングが続く最終コース',
+    difficulty: 5,
+    laps: 3,
+    width: 15,
+    shoulder: 0, // 路肩なし。道のふちがそのまま手すりになる
+    theme: 'space',
+    bgm: 'rainbow',
+    points: [
+      [0, 0, 0], [75, 6, 0], [140, 18, -30], [170, 30, -90], [150, 40, -150], [90, 44, -190],
+      [20, 40, -200], [-50, 32, -185], [-110, 20, -150], [-155, 10, -95], [-170, 4, -35],
+      [-145, 0, 10], [-85, 0, 28], [-30, 0, 16],
+    ],
+    surfaces: [],
+    boosts: [{ at: 1.6, lane: 0 }, { at: 5.4, lane: 0 }, { at: 9.4, lane: 0 }, { at: 12.6, lane: 0.4 }],
+    itemBoxes: [
+      { at: 0.9, lanes: [-1, 0, 1] },
+      { at: 4.4, lanes: [-1, 0, 1] },
+      { at: 8.4, lanes: [-1, 0, 1] },
+      { at: 11.6, lanes: [-1, 0, 1] },
+    ],
+    jumps: [{ at: 3.2 }, { at: 7.2 }, { at: 10.8 }],
+    gimmicks: [
+      { type: 'ring', at: 2.5, lane: 0 },
+      { type: 'ring', at: 6.4, lane: 0 },
+      { type: 'ring', at: 10.2, lane: 0 },
+      { type: 'roller', at: 4.9, period: 3.6, len: 8, color: 0xff7ab8 },
+      { type: 'pendulum', at: 8.9, period: 3, swing: 0.85, color: 0x9d7bff },
+    ],
+    palette: {
+      // 虹の道。rainbow を立てると路面と縁石の色を進むほど変えていく
+      rainbow: true,
+      rainbowTurns: 3,
+      skyTop: 0x03030d, skyBottom: 0x0b0724, fog: 0x0b0724, fogNear: 160, fogFar: 620,
+      ground: 0x000000, road: 0xffffff, roadLine: 0xffffff, curbA: 0xffffff, curbB: 0xffffff,
+      shoulder: 0x1a1436, wall: 0x2a2050, hemiSky: 0x8f7bff, hemiGround: 0x1a1030,
+      sun: 0xdfd9ff, sunIntensity: 1.1, night: true,
+    },
+  },
 ];
 
 export const COURSE_BY_ID = Object.fromEntries(COURSES.map((c) => [c.id, c]));

@@ -271,7 +271,15 @@ function drawCoursePreview(canvas, course) {
   path();
   ctx.stroke();
   ctx.lineWidth = 5;
-  ctx.strokeStyle = '#' + course.palette.road.toString(16).padStart(6, '0');
+  if (course.palette.rainbow) {
+    // 虹の道は 1 色で塗るとただの白い線になるので、コースにそって色を変える
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    const turns = course.palette.rainbowTurns || 3;
+    for (let i = 0; i <= 12; i++) g.addColorStop(i / 12, `hsl(${Math.round(((i / 12) * turns * 360) % 360)} 90% 60%)`);
+    ctx.strokeStyle = g;
+  } else {
+    ctx.strokeStyle = '#' + course.palette.road.toString(16).padStart(6, '0');
+  }
   path();
   ctx.stroke();
   ctx.fillStyle = '#ffd23f';

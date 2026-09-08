@@ -15,7 +15,10 @@ export class Track {
     this.def = def;
     this.width = def.width;
     this.halfWidth = def.width / 2;
-    this.wallDist = this.halfWidth + SHOULDER_WIDTH; // 中心からの壁までの距離
+    // 路肩の幅はコースごとに変えられる。0 にすると路面の端がそのまま壁になり、
+    // 宙に浮いた一本の道（レインボーロード）になる
+    this.shoulderWidth = def.shoulder === undefined ? SHOULDER_WIDTH : def.shoulder;
+    this.wallDist = this.halfWidth + this.shoulderWidth; // 中心からの壁までの距離
     const pts = def.points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
     this.curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
     this.curve.arcLengthDivisions = 2000;
@@ -281,17 +284,27 @@ export class Track {
     const pos = new Float32Array(N * RV * 3);
     const col = new Float32Array(N * RV * 3);
     const uv = new Float32Array(N * RV * 2);
+    // レインボーロード用。1 周ぶんで色相が何回まわるかを決めて、
+    // サンプルごとに路面と縁石の色を作る
+    const rainbow = palette.rainbow ? { turns: palette.rainbowTurns || 3 } : null;
+    const _hsl = new THREE.Color();
+    const rainbowAt = (i, light, sat = 0.85) => _hsl.setHSL((((i / N) * rainbow.turns) % 1 + 1) % 1, sat, light).clone();
     for (let i = 0; i < N; i++) {
       const s = this.samples[i];
       const curb = Math.floor(i / 3) % 2 === 0 ? curbA : curbB;
       const dash = Math.floor(i / 5) % 2 === 0; // センターラインの破線
       const lift = s.ramp ? s.ramp.lift : 0;
+      // 虹色のときは、この位置の色を先に作っておく
+      const rbRoad = rainbow ? rainbowAt(i, 0.5) : null;
+      // 縁石は路面より半周ぶんずらした補色で、明暗の縞にして走行感を出す（暗くしすぎると濁る）
+      const rbCurb = rainbow ? rainbowAt(i + N * 0.17, Math.floor(i / 3) % 2 === 0 ? 0.88 : 0.55, 1) : null;
       for (let b = 0; b < bands.length; b++) {
         const [l0, l1, kind] = bands[b];
         let c = roadColor;
-        if (kind === 'curb') c = curb;
+        if (kind === 'curb') c = rainbow ? rbCurb : curb;
         else if (kind === 'line') c = lineColor;
-        else if (kind === 'center') c = dash ? lineColor : roadColor;
+        else if (kind === 'center') c = dash ? lineColor : rainbow ? rbRoad : roadColor;
+        else if (rainbow) c = rbRoad;
         // 氷・水・溶岩の区間は路面部分だけ塗り替える
         if (s.surface !== 'road' && kind !== 'curb') {
           const sl = s.surfLat;
@@ -327,7 +340,9 @@ export class Track {
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const roadMat = toonMat(0xffffff, { vertexColors: true, map: quality === 'low' ? null : asphaltTexture(1) });
+    const roadMat = palette.rainbow
+      ? new THREE.MeshBasicMaterial({ vertexColors: true }) // 虹の道は自分で光っているように見せる
+      : toonMat(0xffffff, { vertexColors: true, map: quality === 'low' ? null : asphaltTexture(1) });
     const road = new THREE.Mesh(geo, roadMat);
     road.name = 'road';
     road.receiveShadow = true;
@@ -437,7 +452,8 @@ export class Track {
     const shoulder = new THREE.Mesh(shGeo, toonMat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }));
     shoulder.name = 'shoulder';
     shoulder.receiveShadow = true;
-    group.add(shoulder);
+    // 路肩がないコースでは、路肩も下のスカートも出さない（宙に浮いた道にする）
+    if (this.shoulderWidth > 0) group.add(shoulder);
 
     const wallGeo = new THREE.BufferGeometry();
     wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(wallPos, 3));
@@ -446,7 +462,7 @@ export class Track {
     wallGeo.computeVertexNormals();
     const wall = new THREE.Mesh(wallGeo, toonMat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }));
     wall.name = 'wall';
-    group.add(wall);
+    if (this.shoulderWidth > 0) group.add(wall);
 
     const skirtGeo = new THREE.BufferGeometry();
     skirtGeo.setAttribute('position', new THREE.Float32BufferAttribute(skirtPos, 3));
@@ -454,40 +470,53 @@ export class Track {
     skirtGeo.computeVertexNormals();
     const skirt = new THREE.Mesh(skirtGeo, toonMat(palette.ground, { side: THREE.DoubleSide }));
     skirt.name = 'skirt';
-    group.add(skirt);
+    if (this.shoulderWidth > 0) group.add(skirt);
 
     // ガードレール（壁の上に等間隔の支柱とレール）
-    if (quality !== 'low') {
+    // 虹の道は壁も路肩もないので、軽量設定でも手すりだけは出して道のふちを見せる
+    if (quality !== 'low' || palette.rainbow) {
       const step = 8;
       // ループは ceil(N / step) 回まわるので、切り上げでインスタンスを確保する。
       // 足りないと余ったインスタンスの行列がゼロのまま描かれ、空に巨大な三角形が出る
       const count = Math.ceil(N / step) * 2;
       const postGeo = new THREE.CylinderGeometry(0.12, 0.14, 1.1, 6);
-      const posts = new THREE.InstancedMesh(postGeo, toonMat(0xdfe4ea), count);
+      // 虹の道では手すりも自分で光らせる（暗い宇宙で道のふちを見せる）
+      const glow = !!palette.rainbow;
+      const posts = new THREE.InstancedMesh(postGeo, glow ? new THREE.MeshBasicMaterial({ color: 0xdfe4ea }) : toonMat(0xdfe4ea), count);
       posts.frustumCulled = false;
       const railGeo = new THREE.BoxGeometry(0.18, 0.32, 1);
-      const rails = new THREE.InstancedMesh(railGeo, toonMat(palette.curbA), count);
+      // 虹の道の手すりは setColorAt の instanceColor で色をつける。
+      // ここで vertexColors を立てると、色属性のない BoxGeometry では真っ黒になる
+      const rails = new THREE.InstancedMesh(
+        railGeo,
+        glow ? new THREE.MeshBasicMaterial({ color: 0xffffff }) : toonMat(palette.curbA),
+        count
+      );
       rails.frustumCulled = false;
       const m4 = new THREE.Matrix4();
       const qt = new THREE.Quaternion();
       const up = new THREE.Vector3(0, 1, 0);
+      const _railCol = new THREE.Color();
+      // 壁がないコースでは手すりを路面のふちに直接立てる（宙に浮かないように）
+      const railBase = this.shoulderWidth > 0 ? WALL_HEIGHT : 0.05;
       let pi = 0;
       for (let i = 0; i < N; i += step) {
         const s = this.samples[i];
         const s2 = this.samples[(i + step) % N];
         for (const side of [-1, 1]) {
           const b = s.pos.clone().addScaledVector(s.right, side * wd);
-          m4.compose(new THREE.Vector3(b.x, b.y + WALL_HEIGHT + 0.5, b.z), qt.setFromAxisAngle(up, s.heading), new THREE.Vector3(1, 1, 1));
+          m4.compose(new THREE.Vector3(b.x, b.y + railBase + 0.5, b.z), qt.setFromAxisAngle(up, s.heading), new THREE.Vector3(1, 1, 1));
           posts.setMatrixAt(pi, m4);
           const b2 = s2.pos.clone().addScaledVector(s2.right, side * wd);
           const mid = b.clone().lerp(b2, 0.5);
           const len = b.distanceTo(b2);
           m4.compose(
-            new THREE.Vector3(mid.x, mid.y + WALL_HEIGHT + 0.85, mid.z),
+            new THREE.Vector3(mid.x, mid.y + railBase + 0.85, mid.z),
             qt.setFromAxisAngle(up, Math.atan2(b2.x - b.x, b2.z - b.z)),
             new THREE.Vector3(1, 1, len)
           );
           rails.setMatrixAt(pi, m4);
+          if (glow) rails.setColorAt(pi, _railCol.setHSL((((i / N) * (palette.rainbowTurns || 3)) % 1 + 1) % 1, 0.95, 0.6));
           pi++;
         }
       }
@@ -495,6 +524,7 @@ export class Track {
       rails.count = pi;
       posts.instanceMatrix.needsUpdate = true;
       rails.instanceMatrix.needsUpdate = true;
+      if (rails.instanceColor) rails.instanceColor.needsUpdate = true;
       group.add(posts, rails);
     }
 
