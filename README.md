@@ -112,6 +112,7 @@ npm run check:audio    # エンジン音 / 効果音 / BGM の音量バランス
 npm run check:results  # ゴール後のリザルト（表彰台がパネルに隠れていないか）
 npm run check:gyro     # ジャイロ操作（設定でオン / オフ、傾きの校正）
 npm run check:stages   # 追加ステージ（周回で景色が変わる / しかけが動く / 虹の道が虹色になっている）
+npm run check:grandprix # グランプリの行き来（前のレースや表彰台が次の画面に残らない）
 ```
 
 ポート 4173 のプレビューを止めるときは `test/kill_port.sh 4173` を使ってください
