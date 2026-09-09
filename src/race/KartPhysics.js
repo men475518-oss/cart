@@ -72,7 +72,61 @@ export function createKartState() {
     reverseHint: 0,
     coins: 0,
     landSquash: 0,    // 着地のつぶれ演出
+    // コースから落ちたとき用（手すりのないコース）
+    falling: false,   // いま落ちている
+    fallTime: 0,      // 落ちはじめてからの秒数
+    respawnTime: 0,   // 戻された直後の点滅・無敵時間
+    safeIndex: null,  // 最後に路面の上にいたときのコース位置
+    safeProgress: 0,
+    safeTotal: 0,
+    safeLat: 0,
   };
+}
+
+// 落ちてから戻されるまでの時間と、戻ったあとの点滅時間
+export const FALL_RESCUE_TIME = 1.1;
+export const RESPAWN_BLINK = 1.0;
+const FALL_GRAVITY = 30;
+
+/**
+ * コースの外へ落ちたカートを、落ちる前にいた場所へ戻す。
+ * 置き直すのは「最後に路面にいたときのコース位置の道のまんなか」。
+ * 落ちたその場（ふちの外）に戻すと、また落ちてしまう
+ */
+export function rescueKart(k) {
+  const s = k.state;
+  const track = k.track;
+  const idx = s.safeIndex == null ? 0 : s.safeIndex;
+  const smp = track.samples[idx];
+  // 落ちる前に寄っていた側に少しだけ寄せて戻す（まんなか固定より自然）
+  const lat = Math.max(-track.halfWidth * 0.5, Math.min(track.halfWidth * 0.5, s.safeLat || 0));
+  s.x = smp.pos.x + smp.right.x * lat;
+  s.y = smp.pos.y;
+  s.z = smp.pos.z + smp.right.z * lat;
+  s.heading = smp.heading;
+  s.moveHeading = smp.heading;
+  s.speed = 0;
+  s.vy = 0;
+  s.hop = 0;
+  s.airborne = false;
+  s.tricked = false;
+  s.airTime = 0;
+  s.drifting = false;
+  s.driftCharge = 0;
+  s.driftTier = -1;
+  s.boostTime = 0;
+  s.knockVx = 0;
+  s.knockVz = 0;
+  s.spinTime = 0;
+  s.stunTime = 0;
+  s.falling = false;
+  s.fallTime = 0;
+  s.respawnTime = RESPAWN_BLINK;
+  s.trackIndex = idx;
+  s.progress = s.safeProgress;
+  s.totalProgress = s.safeTotal;
+  s.lateral = lat;
+  s.surface = smp.surface || 'road';
 }
 
 const _q = {};
@@ -99,6 +153,24 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
   dec('lavaCooldown');
   dec('goldenTime');
   dec('landSquash');
+  dec('respawnTime');
+
+  // 落ちている最中は操作も路面判定もしない。ただ下へ落ちていって、
+  // しばらくしたら落ちる前の場所へ戻す
+  if (s.falling) {
+    s.fallTime += dt;
+    s.vy -= FALL_GRAVITY * dt;
+    s.x += Math.sin(s.moveHeading) * s.speed * dt;
+    s.z += Math.cos(s.moveHeading) * s.speed * dt;
+    s.y += s.vy * dt;
+    s.speed *= Math.max(0, 1 - dt * 1.2);
+    s.spinAngle += dt * 6;
+    if (s.fallTime >= FALL_RESCUE_TIME) {
+      rescueKart(k);
+      events.push({ type: 'respawn', kart: k });
+    }
+    return { slip: 0, speedNorm: 0 };
+  }
 
   const controllable = s.spinTime <= 0 && s.stunTime <= 0 && !s.finished;
   const steer = controllable ? input.steer : 0;
@@ -271,6 +343,17 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
   // トラック拘束（壁）
   const q2 = track.query({ x: s.x, y: s.y, z: s.z }, q.index, _q);
   const wallDist = track.wallDist;
+  // 手すりのないコースは、ふちを越えたら壁で止めずに落とす
+  if (track.canFall && Math.abs(q2.lateral) > wallDist) {
+    s.falling = true;
+    s.fallTime = 0;
+    s.vy = Math.min(s.vy, 0);
+    s.airborne = false;
+    s.drifting = false;
+    s.boostTime = 0;
+    events.push({ type: 'fall', kart: k });
+    return { slip, speedNorm };
+  }
   if (Math.abs(q2.lateral) > wallDist) {
     const over = Math.abs(q2.lateral) - wallDist;
     const sign = Math.sign(q2.lateral);
@@ -298,6 +381,14 @@ export function stepKart(k, input, dt, events, nightBonus = false) {
   if (d < -N / 2) d += N;
   if (s.trackIndex !== null && s.progress !== undefined) s.totalProgress += d;
   s.progress = q2.progress;
+  // 落ちたときに戻る場所。道の上をふつうに走れているあいだだけ覚える。
+  // 進行度を更新したあとに控えるので、戻しても順位がずれない
+  if (!s.airborne && Math.abs(q2.lateral) < track.halfWidth * 0.92) {
+    s.safeIndex = q2.index;
+    s.safeProgress = q2.progress;
+    s.safeTotal = s.totalProgress;
+    s.safeLat = q2.lateral;
+  }
   // 逆走判定
   const fwd = Math.cos(wrapAngle(s.heading - q2.heading));
   s.reverseHint = fwd < -0.3 && s.speed > 5 ? s.reverseHint + dt : 0;

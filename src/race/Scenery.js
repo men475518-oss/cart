@@ -74,7 +74,9 @@ function addInstanceM(mesh, m4) {
 export function buildScenery(track, course, quality = 'high') {
   const pal = course.palette;
   const group = new THREE.Group();
-  const rng = makeRng(1234 + course.id.length * 7);
+  // 周回ごとにテーマが変わるコースでは、パレットの sceneSeed で星や惑星の
+  // 並びも変える。同じ種のままだと「色だけ違う同じ景色」になってしまう
+  const rng = makeRng(1234 + course.id.length * 7 + (pal.sceneSeed || 0));
   const place = makePlacer(track, rng);
   const dense = quality === 'low' ? 0.5 : 1;
   const groundY = track.minY - 0.3;

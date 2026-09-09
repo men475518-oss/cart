@@ -219,3 +219,103 @@ test('周回で景色が変わるコースにテーマが 3 つある', () => {
   assert.equal(skies.size, 3, '空の色が同じテーマがある');
   assert.equal(grounds.size, 3, '地面の色が同じテーマがある');
 });
+
+// ---------- ドッスン ----------
+const rainbowCourse = getCourse('rainbow');
+const rainbowTrack = new Track(rainbowCourse);
+function makeRainbowSystem(karts, events) {
+  return new GimmickSystem({ track: rainbowTrack, scene: stubScene, karts, events, particles: stubParticles, course: rainbowCourse });
+}
+function makeRainbowKart() {
+  const char = getCharacter('taro');
+  const params = buildParams(char, {});
+  const state = createKartState();
+  state.speed = 25;
+  return { id: 'k', char, params, state, track: rainbowTrack, baseMaxSpeed: params.maxSpeed, items: [], roulette: null };
+}
+/** そのしかけが下りきる位相まで時間を進める */
+function advanceTo(sys, g, wantLow) {
+  for (let i = 0; i < 2000; i++) {
+    sys.update(1 / 60);
+    const low = g.body.position.y < g.groundY + 0.6;
+    if (low === wantLow) return true;
+  }
+  return false;
+}
+
+test('レインボーロードにドッスンが並んでいる', () => {
+  const sys = makeRainbowSystem([], []);
+  const th = sys.items.filter((g) => g.kind === 'thwomp');
+  assert.ok(th.length >= 4, `ドッスンが ${th.length} 個しかない`);
+  assert.equal(sys.items.length, rainbowCourse.gimmicks.length, 'しかけの数が合わない');
+  for (const g of th) assert.ok(g.node, '見た目がない');
+});
+
+test('ドッスンは上と下を行き来する', () => {
+  const sys = makeRainbowSystem([], []);
+  const g = sys.items.find((x) => x.kind === 'thwomp');
+  let hi = -Infinity;
+  let lo = Infinity;
+  for (let i = 0; i < 600; i++) {
+    sys.update(1 / 60);
+    hi = Math.max(hi, g.body.position.y);
+    lo = Math.min(lo, g.body.position.y);
+  }
+  assert.ok(hi > g.restY - 0.05, `いちばん上まで戻らない（${hi.toFixed(2)} / ${g.restY.toFixed(2)}）`);
+  assert.ok(lo < g.groundY + 0.05, `いちばん下まで落ちない（${lo.toFixed(2)} / ${g.groundY.toFixed(2)}）`);
+  assert.ok(hi - lo > 5, `上下の幅が小さすぎる（${(hi - lo).toFixed(2)}）`);
+});
+
+test('ドッスンの下にいるとつぶされる', () => {
+  const events = [];
+  const k = makeRainbowKart();
+  const sys = makeRainbowSystem([k], events);
+  const g = sys.items.find((x) => x.kind === 'thwomp');
+  placeOn(k, g, 0);
+  assert.ok(advanceTo(sys, g, true), 'ドッスンが落ちてこない');
+  placeOn(k, g, 0);
+  sys.update(1 / 60);
+  assert.ok(k.state.spinTime > 0, 'つぶされていない');
+  assert.ok(k.state.squashTime > 0, 'ぺしゃんこになっていない');
+  assert.ok(events.some((e) => e.type === 'gimmickHit' && e.gimmick === 'thwomp'), 'イベントが出ていない');
+});
+
+test('ドッスンが上にいるあいだは下を通れる', () => {
+  const events = [];
+  const k = makeRainbowKart();
+  const sys = makeRainbowSystem([k], events);
+  const g = sys.items.find((x) => x.kind === 'thwomp');
+  assert.ok(advanceTo(sys, g, false), 'ドッスンが上がらない');
+  placeOn(k, g, 0);
+  sys.update(1 / 60);
+  assert.equal(k.state.spinTime, 0, '上にいるのにつぶされた');
+});
+
+test('ドッスンの横にずれていればよけられる', () => {
+  const events = [];
+  const k = makeRainbowKart();
+  const sys = makeRainbowSystem([k], events);
+  const g = sys.items.find((x) => x.kind === 'thwomp');
+  assert.ok(advanceTo(sys, g, true), 'ドッスンが落ちてこない');
+  placeOn(k, g, g.w * 0.5 + 2.6); // 石の外へ横にどく
+  sys.update(1 / 60);
+  assert.equal(k.state.spinTime, 0, 'よけたのにつぶされた');
+});
+
+test('ドッスンは落ちた瞬間だけ地響きイベントを出す', () => {
+  const events = [];
+  const sys = makeRainbowSystem([], events);
+  const g = sys.items.find((x) => x.kind === 'thwomp');
+  for (let i = 0; i < 600; i++) sys.update(1 / 60);
+  // コースにはドッスンが何個もあるので、この 1 個ぶんだけ数える
+  const fires = events.filter(
+    (e) => e.type === 'gimmickFire' && e.gimmick === 'thwomp' && Math.hypot(e.x - g.node.position.x, e.z - g.node.position.z) < 0.1
+  );
+  const cycles = 10 / g.period;
+  // 毎フレーム出ていたら数百回になる。1 周期に 1 回だけのはず
+  assert.ok(
+    fires.length >= Math.floor(cycles) - 1 && fires.length <= Math.ceil(cycles) + 1,
+    `地響きが ${fires.length} 回（周期 ${g.period} 秒なので ${cycles.toFixed(1)} 回前後のはず）`
+  );
+  assert.ok(g.restY > g.groundY, '待機位置が地面より上にない');
+});

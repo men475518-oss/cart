@@ -120,37 +120,44 @@ for (const course of COURSES) {
   });
 }
 
-// 路肩ゼロのコース（レインボーロード）は宙に浮いた一本道になる
+// 路肩ゼロのコース（レインボーロード）は手すりのない宙に浮いた一本道で、
+// ふちを越えたら落ちる
 for (const course of COURSES.filter((c) => c.shoulder === 0)) {
-  test(`track ${course.id}: 路肩なしの浮いた道になっている`, () => {
+  test(`track ${course.id}: 手すりのない浮いた道で、ふちの外は落ちる`, () => {
     const t = new Track(course);
     assert.equal(t.shoulderWidth, 0, 'コース定義の shoulder が効いていない');
-    assert.equal(t.wallDist, t.halfWidth, '路肩がないので壁は路面のふち');
-    // 路面のすぐ外はオフロードではなく壁（落ちないように見えない壁で止める）
+    assert.equal(t.wallDist, t.halfWidth, '路肩がないので道のふちがそのまま端');
+    assert.equal(t.canFall, true, '落ちるコースになっていない');
+    // 路面のすぐ外は路肩ではない（落ちる判定に回る）
     const s = t.samples[10];
     for (const side of [-1, 1]) {
       const off = s.pos.clone().addScaledVector(s.right, side * (t.halfWidth + 0.2));
-      assert.equal(t.query(off, 10).surface, 'wall');
+      assert.notEqual(t.query(off, 10).surface, 'road');
     }
-    // 路肩・壁・スカートのメッシュは出さない（宇宙に黒い板が浮かないように）
-    const group = t.buildMesh(course.palette, 'high');
-    // 失敗メッセージに巨大なオブジェクトを出さないよう、名前だけを比べる
-    const meshNames = [];
-    group.traverse((o) => {
-      if (o.name) meshNames.push(o.name);
-    });
-    for (const name of ['shoulder', 'wall', 'skirt']) {
-      assert.ok(!meshNames.includes(name), `${name} メッシュが残っている`);
-    }
-    // ふちのガードレールは残す（道の形が見えるように）
-    // 軽量設定（スマホ）でも手すりだけは残す
+    // 路肩・壁・スカートの板は出さない（宇宙に黒い板が浮かないように）
     for (const quality of ['high', 'low']) {
-      const g = quality === 'high' ? group : t.buildMesh(course.palette, quality);
+      const group = t.buildMesh(course.palette, quality);
+      const names = [];
+      group.traverse((o) => {
+        if (o.name) names.push(o.name);
+      });
+      for (const name of ['shoulder', 'wall', 'skirt']) {
+        assert.ok(!names.includes(name), `${quality}: ${name} メッシュが残っている`);
+      }
+      // 手すりも出さない。あると落ちようがなくなる
       let rails = 0;
-      g.traverse((o) => {
+      group.traverse((o) => {
         if (o.isInstancedMesh) rails++;
       });
-      assert.ok(rails > 0, `${quality} でガードレールがない`);
+      assert.equal(rails, 0, `${quality}: 手すりが残っていて落ちられない`);
     }
+  });
+}
+
+// 手すりのあるふつうのコースは落ちない
+for (const course of COURSES.filter((c) => c.shoulder !== 0)) {
+  test(`track ${course.id}: 壁があるので落ちない`, () => {
+    const t = new Track(course);
+    assert.equal(t.canFall, false, `${course.id} が落ちるコースになっている`);
   });
 }

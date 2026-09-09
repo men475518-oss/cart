@@ -5,6 +5,7 @@
 //   geyser   … ときどき噴き上がる噴水・溶岩。乗っていると打ち上げられる
 //   fan      … 横風を送る送風機。通ると横に押される
 //   ring     … くぐるとダッシュできる光の輪（うれしいしかけ）
+//   thwomp   … ドッスン。上で待ちかまえて、下を通ると落ちてくる。つぶされるとスピン
 import * as THREE from 'three';
 import { toonMat } from './Materials.js';
 import { applyBoost, spinOut, knockBack } from './KartPhysics.js';
@@ -150,6 +151,56 @@ export class GimmickSystem {
         node.add(holder);
         return { def, node, kind: 'fan', blades, side, power: def.power ?? 15, span: def.span ?? 10 };
       }
+      case 'thwomp': {
+        // ドッスン。四角い石が上で待っていて、ときどき落ちてくる
+        const w = def.size ?? 4.4;
+        const h = def.height ?? 4.6;
+        const body = new THREE.Group();
+        const stone = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.8), toonMat(def.color ?? 0x8892a6));
+        body.add(stone);
+        // ふちの飾り（下側をとがらせて重そうに見せる）
+        const rim = new THREE.Mesh(new THREE.BoxGeometry(w * 1.08, 0.5, w * 0.88), toonMat(def.rimColor ?? 0x5d6675));
+        rim.position.y = -h / 2 + 0.2;
+        body.add(rim);
+        // 顔（目と口）。node の前方（+Z）は進行方向なので、走ってくる側から
+        // 見えるように -Z 側へ付ける。+Z に付けると後ろ姿しか見えない
+        const fz = -w * 0.41;
+        const face = new THREE.Group();
+        for (const e of [-1, 1]) {
+          const eye = new THREE.Mesh(new THREE.BoxGeometry(w * 0.2, w * 0.26, 0.2), toonMat(0xffffff));
+          eye.position.set(e * w * 0.2, h * 0.12, fz);
+          face.add(eye);
+          const pupil = new THREE.Mesh(new THREE.BoxGeometry(w * 0.09, w * 0.14, 0.2), toonMat(0x2b2f38));
+          pupil.position.set(e * w * 0.2, h * 0.07, fz - 0.03);
+          face.add(pupil);
+          // への字まゆ。おこった顔にして「危ない」のがひと目でわかるように
+          const brow = new THREE.Mesh(new THREE.BoxGeometry(w * 0.24, w * 0.06, 0.2), toonMat(0x2b2f38));
+          brow.position.set(e * w * 0.2, h * 0.24, fz - 0.03);
+          brow.rotation.z = e * -0.35;
+          face.add(brow);
+        }
+        const mouth = new THREE.Mesh(new THREE.BoxGeometry(w * 0.34, w * 0.09, 0.2), toonMat(0x2b2f38));
+        mouth.position.set(0, -h * 0.14, fz - 0.03);
+        face.add(mouth);
+        // 下側のとげ（重そうに見せる）
+        for (let i = 0; i < 4; i++) {
+          const spike = new THREE.Mesh(new THREE.ConeGeometry(w * 0.09, w * 0.16, 4), toonMat(def.rimColor ?? 0x5d6675));
+          spike.rotation.x = Math.PI;
+          spike.position.set((i / 3 - 0.5) * w * 0.7, -h / 2 - w * 0.05, 0);
+          body.add(spike);
+        }
+        body.add(face);
+        node.add(body);
+        const up = def.up ?? 7.5;
+        body.position.y = up + h / 2;
+        return {
+          def, node, kind: 'thwomp', body, face, w, h, up, period, offset,
+          restY: up + h / 2,
+          groundY: h / 2 + 0.1,
+          low: false,
+          cool: new Map(),
+        };
+      }
       case 'ring': {
         // くぐるとダッシュできる光の輪
         const torus = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.28, 10, 24), toonMat(0xffd23f, { emissive: 0xffaa00, emissiveIntensity: 0.8 }));
@@ -185,6 +236,9 @@ export class GimmickSystem {
         case 'ring':
           this._ring(g, t, dt);
           break;
+        case 'thwomp':
+          this._thwomp(g, t, dt);
+          break;
         default:
           break;
       }
@@ -205,6 +259,7 @@ export class GimmickSystem {
     for (const k of this.karts) {
       const s = k.state;
       if (s.finished || k.gone || k.remote) continue;
+      if (s.falling) continue; // 落ちている最中のカートには当たらない
       // すでにぶつかって立ち直り中のカートは対象外。
       // これがないと同じしかけに毎フレーム当たりつづけて動けなくなる
       if (skipHurt && (s.spinTime > 0 || s.stunTime > 0)) continue;
@@ -361,6 +416,70 @@ export class GimmickSystem {
       applyBoost(k, 1.0 * k.params.boostDurMult, 1.4);
       this.events.push({ type: 'gimmickBoost', kart: k, gimmick: 'ring' });
     });
+  }
+
+  /**
+   * ドッスン。周期のなかで「上で待つ → すとんと落ちる → 少し止まる → ゆっくり上がる」。
+   * 落ちてくる前にぷるぷる震えるので、下にいる人は逃げられる
+   */
+  _thwomp(g, t, dt) {
+    const p = phase(t, g.period, g.offset);
+    const span = g.restY - g.groundY;
+    let y;
+    let shake = 0;
+    if (p < 0.52) {
+      // 上で待機。落ちる直前だけ小刻みにゆれて予告する
+      y = g.restY;
+      if (p > 0.4) shake = (p - 0.4) / 0.12;
+    } else if (p < 0.6) {
+      // 落下（だんだん速く）
+      const u = (p - 0.52) / 0.08;
+      y = g.restY - span * u * u;
+    } else if (p < 0.72) {
+      y = g.groundY; // 地面で止まっている
+    } else {
+      // ゆっくり上昇（なめらかに加速して減速する）
+      const u = (p - 0.72) / 0.28;
+      y = g.groundY + span * u * u * (3 - 2 * u);
+    }
+    g.body.position.y = y;
+    g.body.position.x = shake ? Math.sin(t * 60) * 0.12 * shake : 0;
+    const low = y < g.groundY + 0.6;
+    // 着地した瞬間に土けむりと地響き
+    if (low && !g.low) {
+      g.low = true;
+      const c = g.node.position;
+      if (this.particles) {
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2;
+          this.particles.emit(
+            c.x + Math.cos(a) * g.w * 0.5,
+            c.y + 0.3,
+            c.z + Math.sin(a) * g.w * 0.5,
+            Math.cos(a) * 9,
+            3 + Math.random() * 3,
+            Math.sin(a) * 9,
+            0xdfe4ea,
+            1.6,
+            0.7
+          );
+        }
+      }
+      this.events.push({ type: 'gimmickFire', gimmick: 'thwomp', x: c.x, y: c.y, z: c.z });
+    } else if (!low) g.low = false;
+    if (!low) return;
+    // 石の真下にいるとつぶされる
+    this._forEachKart((k, s) => {
+      const l = this._local(g, s);
+      if (Math.abs(l.along) > g.w * 0.4 + HIT_R) return;
+      if (Math.abs(l.lat) > g.w * 0.5 + HIT_R) return;
+      if (t < (g.cool.get(k) || 0)) return;
+      if (spinOut(k, 1.2)) {
+        s.squashTime = Math.max(s.squashTime, 0.7); // ぺしゃんこ演出
+        g.cool.set(k, t + 2.2);
+        this.events.push({ type: 'gimmickHit', kart: k, gimmick: 'thwomp' });
+      }
+    }, true);
   }
 
   dispose() {

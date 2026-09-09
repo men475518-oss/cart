@@ -70,7 +70,7 @@ export class CoinSystem {
       }
       for (const k of this.karts) {
         const s = k.state;
-        if (s.finished || k.gone) continue;
+        if (s.finished || k.gone || s.falling) continue;
         if ((s.hop || 0) > 1.6) continue; // 高く飛んでいる最中は取れない
         const dx = s.x - sp.pos.x;
         const dz = s.z - sp.pos.z;

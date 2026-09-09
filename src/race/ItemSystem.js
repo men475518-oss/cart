@@ -375,6 +375,7 @@ export class ItemSystem {
     for (const k of this.karts) {
       if (k.remote) continue; // リモートのカートは相手側で判定
       const s = k.state;
+      if (s.falling) continue; // 落ちている最中は当たらない
       if (s.finished && h.type !== 'banana') continue;
       if (h.heldBy === k) continue; // 構えている本人には当たらない
       if (h.owner === k && !h.heldBy && h.age < (h.type === 'boomerang' ? 0.5 : h.type === 'banana' ? 1.0 : 0.6)) continue;
@@ -419,7 +420,7 @@ export class ItemSystem {
     this.fx.explosion(pos, 7.5);
     this.events.push({ type: 'explosion', x: h.x, z: h.z });
     for (const k of this.karts) {
-      if (k.remote) continue;
+      if (k.remote || k.state.falling) continue;
       const d = Math.hypot(k.state.x - h.x, k.state.z - h.z);
       if (d < 7.5) {
         if (knockBack(k, h.x, h.z, 1)) this.events.push({ type: 'hit', kart: k, by: h.owner, item: 'bomb' });
@@ -654,7 +655,7 @@ export class ItemSystem {
   applyLightning(from) {
     this.events.push({ type: 'lightning', kart: from });
     for (const k of this.karts) {
-      if (k === from || k.remote) continue;
+      if (k === from || k.remote || k.state.falling) continue;
       const s = k.state;
       if (s.starTime > 0) continue;
       s.squashTime = 4.5;
@@ -674,7 +675,7 @@ export class ItemSystem {
       if (Math.hypot(h.x - s.x, h.z - s.z) < 12) this._destroy(h, true);
     }
     for (const k of this.karts) {
-      if (k === from || k.remote) continue;
+      if (k === from || k.remote || k.state.falling) continue;
       if (Math.hypot(k.state.x - s.x, k.state.z - s.z) < 9) {
         if (knockBack(k, s.x, s.z, 0.8)) this.events.push({ type: 'hit', kart: k, by: from, item: 'superHorn' });
       }

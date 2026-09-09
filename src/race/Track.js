@@ -19,6 +19,8 @@ export class Track {
     // 宙に浮いた一本の道（レインボーロード）になる
     this.shoulderWidth = def.shoulder === undefined ? SHOULDER_WIDTH : def.shoulder;
     this.wallDist = this.halfWidth + this.shoulderWidth; // 中心からの壁までの距離
+    // 手すりのないコースは、ふちを越えたら落ちる（落ちると少し前の場所へ戻される）
+    this.canFall = def.fallOff === undefined ? this.shoulderWidth === 0 : !!def.fallOff;
     const pts = def.points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
     this.curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
     this.curve.arcLengthDivisions = 2000;
@@ -472,9 +474,9 @@ export class Track {
     skirt.name = 'skirt';
     if (this.shoulderWidth > 0) group.add(skirt);
 
-    // ガードレール（壁の上に等間隔の支柱とレール）
-    // 虹の道は壁も路肩もないので、軽量設定でも手すりだけは出して道のふちを見せる
-    if (quality !== 'low' || palette.rainbow) {
+    // ガードレール（壁の上に等間隔の支柱とレール）。
+    // 落ちるコースには手すりを付けない。付けると落ちようがなくなる
+    if (quality !== 'low' && !this.canFall) {
       const step = 8;
       // ループは ceil(N / step) 回まわるので、切り上げでインスタンスを確保する。
       // 足りないと余ったインスタンスの行列がゼロのまま描かれ、空に巨大な三角形が出る
