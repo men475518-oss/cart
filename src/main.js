@@ -273,6 +273,9 @@ class App {
     }
     const standings = cupStandings(gp.entries);
     const last = gp.index >= gp.cup.courses.length - 1;
+    // レースの後片づけをしてから順位を出す。これをしないと #game が出したままになり、
+    // 消したはずのレースの最後の 1 コマが順位表の背景に残る
+    this._leaveRace();
     this.show(
       UI.standingsScreen({
         cup: gp.cup,
@@ -311,6 +314,9 @@ class App {
     }));
     this.hudRoot.innerHTML = '';
     audio.stopBgm();
+    // 表彰台を 3D で描くので、順位表で外した #game をもう一度出す
+    this.appEl.classList.add('in-race');
+    this.show(null);
     this.results = new ResultsScreen({
       renderer: this.renderer,
       root: this.uiRoot,
@@ -319,9 +325,15 @@ class App {
       cup: gp.cup,
       onAction: (act) => {
         this.gp = null;
-        if (act === 'again') this.showCup();
-        else if (act === 'course') this.showCup();
-        else this.showTitle();
+        // 表彰台と 3D 画面を必ず片づけてから戻る。片づけないと、
+        // カップ選択の上に表彰台とリザルトのパネルが重なったまま残る
+        this._leaveRace();
+        if (act === 'title') {
+          this.showTitle();
+          return;
+        }
+        audio.playBgm('menu');
+        this.showCup();
       },
     });
     this.resize();

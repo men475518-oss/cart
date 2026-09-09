@@ -18,6 +18,7 @@
     "check:results": "node test/results.mjs",
     "check:gyro": "node test/gyro.mjs",
     "check:stages": "node test/stages.mjs",
+    "check:grandprix": "node test/grandprix.mjs",
     "worker:dev": "wrangler dev --port 8788",
     "worker:deploy": "wrangler deploy",
     "worker:test": "node test/worker.mjs",
