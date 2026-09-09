@@ -354,6 +354,23 @@ class AudioEngine {
         this._tone({ freq: 1047, type: 'triangle', dur: 0.15, vol: 0.2 * v });
         this._tone({ freq: 1319, type: 'triangle', t: t + 0.12, dur: 0.3, vol: 0.2 * v });
         break;
+      case 'fall':
+        // コースから落ちるときの「ひゅ〜…」。音がどんどん下がっていく
+        this._tone({ freq: 900, type: 'sine', dur: 1.0, vol: 0.16 * v, sweepTo: 90 });
+        this._tone({ freq: 1350, type: 'triangle', dur: 0.9, vol: 0.08 * v, sweepTo: 120 });
+        this._noiseBurst({ t, dur: 0.9, vol: 0.05 * v, filter: 'lowpass', freq: 2200, sweepTo: 200 });
+        break;
+      case 'respawn':
+        // 元の場所に戻されるときの「ぽん」
+        this._tone({ freq: 330, type: 'triangle', dur: 0.18, vol: 0.16 * v, sweepTo: 880 });
+        this._tone({ freq: 660, type: 'sine', t: t + 0.1, dur: 0.24, vol: 0.13 * v, sweepTo: 1320 });
+        break;
+      case 'thwomp':
+        // ドッスンが落ちて地面をたたく「ドスン！」
+        this._tone({ freq: 140, type: 'square', dur: 0.4, vol: 0.34 * v, sweepTo: 38 });
+        this._tone({ freq: 70, type: 'sine', dur: 0.55, vol: 0.3 * v, sweepTo: 28 });
+        this._noiseBurst({ t, dur: 0.35, vol: 0.22 * v, filter: 'lowpass', freq: 900, sweepTo: 90 });
+        break;
       case 'warp':
         // 景色が切り替わるときの「シュワッ」
         this._tone({ freq: 220, type: 'sawtooth', dur: 0.5, vol: 0.14 * v, sweepTo: 1760 });

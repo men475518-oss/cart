@@ -276,7 +276,7 @@ export const COURSES = [
     id: 'rainbow',
     name: 'レインボーロード',
     emoji: '🌈',
-    desc: '宇宙にかかる虹の道。ふちは光る手すりだけ、外は星の海。ダッシュ板とリングが続く最終コース',
+    desc: '手すりのない宇宙の虹の道。落ちたら少し前まで戻される！ドッスンだらけで、1 周ごとに景色も変わる最終コース',
     difficulty: 5,
     laps: 3,
     width: 15,
@@ -297,12 +297,21 @@ export const COURSES = [
       { at: 11.6, lanes: [-1, 0, 1] },
     ],
     jumps: [{ at: 3.2 }, { at: 7.2 }, { at: 10.8 }],
+    // しかけだらけ。ドッスンは落ちてくる位置をずらして、逃げ道が残るように並べる
     gimmicks: [
+      { type: 'thwomp', at: 1.15, lane: -0.55, period: 3.0, color: 0x7ad7ff, rimColor: 0x3f7fa6 },
       { type: 'ring', at: 2.5, lane: 0 },
-      { type: 'ring', at: 6.4, lane: 0 },
-      { type: 'ring', at: 10.2, lane: 0 },
+      { type: 'thwomp', at: 3.7, lane: 0.55, period: 2.8, offset: 0.35, color: 0xff7ab8, rimColor: 0xa64f78 },
       { type: 'roller', at: 4.9, period: 3.6, len: 8, color: 0xff7ab8 },
+      { type: 'thwomp', at: 5.7, lane: 0, period: 2.6, offset: 0.6, size: 5.2, color: 0xffd166, rimColor: 0xa6853f },
+      { type: 'ring', at: 6.4, lane: 0 },
+      { type: 'fan', at: 7.6, side: -1, power: 13, span: 9, color: 0x9d7bff },
+      { type: 'thwomp', at: 8.2, lane: -0.5, period: 3.2, offset: 0.15, color: 0x9d7bff, rimColor: 0x5b4a99 },
       { type: 'pendulum', at: 8.9, period: 3, swing: 0.85, color: 0x9d7bff },
+      { type: 'thwomp', at: 9.8, lane: 0.5, period: 2.9, offset: 0.5, color: 0x7bffb0, rimColor: 0x3f9968 },
+      { type: 'ring', at: 10.2, lane: 0 },
+      { type: 'roller', at: 11.4, period: 3.2, len: 9, color: 0x7ad7ff },
+      { type: 'thwomp', at: 12.9, lane: 0, period: 2.4, offset: 0.25, size: 5.0, color: 0xff5c8a, rimColor: 0xa63f5f },
     ],
     palette: {
       // 虹の道。rainbow を立てると路面と縁石の色を進むほど変えていく
@@ -313,6 +322,36 @@ export const COURSES = [
       shoulder: 0x1a1436, wall: 0x2a2050, hemiSky: 0x8f7bff, hemiGround: 0x1a1030,
       sun: 0xdfd9ff, sunIntensity: 1.1, night: true,
     },
+    // 1 周ごとに宇宙のどこかへ飛ぶ。虹の色のまわり方と星空の並びも変える
+    lapThemes: [
+      {
+        label: 'にじのはじまり',
+        theme: 'space',
+        palette: {
+          rainbow: true, rainbowTurns: 3, sceneSeed: 0,
+          skyTop: 0x03030d, skyBottom: 0x0b0724, fog: 0x0b0724, fogNear: 160, fogFar: 620,
+          hemiSky: 0x8f7bff, hemiGround: 0x1a1030, sun: 0xdfd9ff, sunIntensity: 1.1,
+        },
+      },
+      {
+        label: 'ばらいろ星雲',
+        theme: 'space',
+        palette: {
+          rainbow: true, rainbowTurns: 5, sceneSeed: 91,
+          skyTop: 0x1a0518, skyBottom: 0x3a0b32, fog: 0x3a0b32, fogNear: 140, fogFar: 560,
+          hemiSky: 0xff9ad5, hemiGround: 0x3a1030, sun: 0xffd6f2, sunIntensity: 1.2,
+        },
+      },
+      {
+        label: 'あおい銀河のはて',
+        theme: 'space',
+        palette: {
+          rainbow: true, rainbowTurns: 2, sceneSeed: 187,
+          skyTop: 0x00121f, skyBottom: 0x03304d, fog: 0x03304d, fogNear: 150, fogFar: 600,
+          hemiSky: 0x7ad7ff, hemiGround: 0x062436, sun: 0xd6f4ff, sunIntensity: 1.25,
+        },
+      },
+    ],
   },
 ];
 

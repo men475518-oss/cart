@@ -1,7 +1,8 @@
 // 追加したステージの検証。
 //  - めぐりめぐる遺跡: 1 周ごとに景色（空・地面・路面・ライト）がまるごと入れかわる
 //  - からくり工場: しかけが置かれ、実際に動いている
-//  - レインボーロード: 路面が虹色に変わり、宇宙に浮いた一本道になっている
+//  - レインボーロード: 路面が虹色に変わり、手すりのない一本道。落ちたら戻され、
+//    ドッスンが落ちてきて、1 周ごとに宇宙のべつの場所へ変わる
 // 実行: npm run check:stages
 import { launchChromium } from './browser.mjs';
 
@@ -204,23 +205,97 @@ async function enter(page, courseId) {
     sc.group.traverse((o) => {
       if (o.geometry?.type === 'PlaneGeometry' && o.geometry.parameters?.width >= 2000 && o.visible) ground = true;
     });
+    let rails = 0;
+    sc.mesh.traverse((o) => {
+      if (o.isInstancedMesh) rails++;
+    });
     return {
       hueBuckets: new Set(hues.map((h) => Math.round(h * 10))).size,
       minLight: lights.length ? Math.min(...lights) : 0,
       railMin,
       railHues: railSet.size,
+      rails,
       names,
       ground,
+      canFall: r.track.canFall,
+      themes: r.sceneries.length,
+      themeLabels: r.sceneries.map((x) => x.label),
     };
   });
   check(info.hueBuckets >= 8, `路面の色が道にそって虹色に変わる（${info.hueBuckets} 色）`);
   check(info.minLight > 0.15, `路面が真っ黒な場所はない（いちばん暗くて ${info.minLight.toFixed(2)}）`);
-  check(info.railMin > 0.2, `手すりが光っている（いちばん暗くて ${info.railMin.toFixed(2)}）`);
-  check(info.railHues >= 4, `手すりも虹色になっている（${info.railHues} 色）`);
   for (const n of ['shoulder', 'wall', 'skirt']) {
     check(!info.names.includes(n), `宇宙なので ${n} の板は出さない`);
   }
+  check(info.rails === 0, `手すりがない（${info.rails} 個）`);
   check(!info.ground, '足もとに地面を敷かない');
+  check(info.canFall, 'ふちを越えたら落ちるコースになっている');
+  check(info.themes === 3, `1 周ごとに変わる景色が 3 つある（${info.themes}）`);
+  check(info.themeLabels.every((l) => l), `景色それぞれに名前がある（${info.themeLabels.join(' / ')}）`);
+
+  // 落ちて、しばらくして元の場所に戻ってくる
+  const fell = await page.evaluate(async () => {
+    const r = window.__app.race;
+    const me = r.karts.find((k) => !k.ai) || r.karts[0];
+    const st = me.state;
+    const before = { index: st.trackIndex, total: st.totalProgress };
+    const smp = r.track.samples[st.trackIndex];
+    st.x = smp.pos.x + smp.right.x * (r.track.halfWidth + 2);
+    st.z = smp.pos.z + smp.right.z * (r.track.halfWidth + 2);
+    let sawFalling = false;
+    let minY = Infinity;
+    for (let i = 0; i < 240; i++) {
+      await new Promise((res) => requestAnimationFrame(res));
+      if (st.falling) {
+        sawFalling = true;
+        minY = Math.min(minY, st.y);
+      }
+      if (sawFalling && !st.falling) break;
+    }
+    return {
+      sawFalling,
+      dropped: before.index != null ? minY < r.track.samples[before.index].pos.y - 3 : false,
+      back: !st.falling,
+      lateral: Math.abs(st.lateral),
+      halfWidth: r.track.halfWidth,
+      advanced: st.totalProgress - before.total,
+    };
+  });
+  check(fell.sawFalling, 'コースの外に出ると落ちる');
+  check(fell.dropped, '実際に下へ落ちていく');
+  check(fell.back, '落ちたあと元に戻ってくる');
+  check(fell.lateral < fell.halfWidth * 0.6, `戻される場所は道の内側（ふちから ${(fell.halfWidth - fell.lateral).toFixed(1)}m）`);
+  check(fell.advanced <= 1, `落ちても先へは進まない（${fell.advanced.toFixed(1)}）`);
+
+  // ドッスンが上下して、下にいるとつぶされる
+  const thwomp = await page.evaluate(async () => {
+    const r = window.__app.race;
+    const me = r.karts.find((k) => !k.ai) || r.karts[0];
+    const list = r.gimmicks.items.filter((g) => g.kind === 'thwomp');
+    const g = list[0];
+    const q = r.track.query({ x: g.node.position.x, y: 0, z: g.node.position.z }, null);
+    const smp = r.track.samples[q.index];
+    const st = me.state;
+    let hi = -Infinity;
+    let lo = Infinity;
+    let squashed = false;
+    for (let i = 0; i < 400; i++) {
+      await new Promise((res) => requestAnimationFrame(res));
+      // 石の真下に居すわる
+      st.x = g.node.position.x;
+      st.z = g.node.position.z;
+      st.y = smp.pos.y;
+      st.speed = 0;
+      st.falling = false;
+      hi = Math.max(hi, g.body.position.y);
+      lo = Math.min(lo, g.body.position.y);
+      if (st.squashTime > 0) squashed = true;
+    }
+    return { count: list.length, hi, lo, squashed };
+  });
+  check(thwomp.count >= 4, `ドッスンが ${thwomp.count} 個ある`);
+  check(thwomp.hi - thwomp.lo > 5, `ドッスンが上下する（幅 ${(thwomp.hi - thwomp.lo).toFixed(1)}）`);
+  check(thwomp.squashed, '真下にいるとつぶされる');
 
   // 画面に実際に何色も出ていること（描画まで通っているかの確認）
   const shot = await page.screenshot({ type: 'png' });

@@ -386,6 +386,7 @@ export class Race {
         const a = this.karts[i];
         const b = this.karts[j];
         if (a.gone || b.gone) continue;
+        if (a.state.falling || b.state.falling) continue; // 落ちている最中はぶつからない
         if (a.remote && b.remote) continue;
         const ax = a.state.x, az = a.state.z, bx = b.state.x, bz = b.state.z;
         resolveKartCollision(a, b, this.events);
@@ -773,6 +774,19 @@ export class Race {
             this._shake(k, 0.3);
           }
           break;
+        case 'fall':
+          // コースから落ちた。しばらく落ちてから元の場所に戻される
+          if (near > 0) audio.sfx('fall', { vol: isView ? 1 : near * 0.6 });
+          if (isView) {
+            audio.voice(k.char, 'hit');
+            for (const h of this._hudOf(k)) h.sub('おっこちた！');
+          }
+          break;
+        case 'respawn':
+          if (isView) audio.sfx('respawn');
+          else if (near > 0) audio.sfx('respawn', { vol: near * 0.4 });
+          this.particles.burst(k.state.x, k.state.y + 1, k.state.z, 16, [0xffffff, 0x9d7bff, 0x7ad7ff], 7, 0.5, 6, 3);
+          break;
         case 'bump':
           if (this.clock - (this._lastBump || 0) > 0.15) {
             this._lastBump = this.clock;
@@ -846,6 +860,30 @@ export class Race {
             for (const h of this._hudOf(k)) h.message(final ? 'FINAL LAP!' : `LAP ${e.lap}`, final ? 'final' : '', 1.6);
           }
           break;
+        case 'gimmickHit':
+          if (near > 0) audio.sfx(e.gimmick === 'thwomp' ? 'squash' : 'bump', { vol: isView ? 1 : near * 0.6 });
+          if (isView) {
+            audio.voice(k.char, 'hit');
+            this._shake(k, e.gimmick === 'thwomp' ? 0.8 : 0.45);
+          }
+          this.particles.burst(k.state.x, k.state.y + 0.6, k.state.z, 14, [0xffffff, 0xdfe4ea], 7, 0.5, 8, 4);
+          break;
+        case 'gimmickFire': {
+          // ドッスンの着地・間欠泉の噴きだし。近くのビューだけ音と揺れ
+          const n2 = this._near(e.x, e.z);
+          if (n2 > 0) audio.sfx(e.gimmick === 'thwomp' ? 'thwomp' : 'splash', { vol: n2 * 0.8 });
+          for (const vp of this.viewports) {
+            if (vp.kart && Math.hypot(vp.kart.state.x - e.x, vp.kart.state.z - e.z) < 16) vp.rig.shake = Math.max(vp.rig.shake, 0.6);
+          }
+          break;
+        }
+        case 'gimmickBoost':
+          if (isView) audio.sfx('boost', { vol: 0.8 });
+          this._boostBurst(k);
+          break;
+        case 'gimmickLaunch':
+          if (near > 0) audio.sfx('jump', { vol: isView ? 0.9 : near * 0.5 });
+          break;
         case 'finish':
           if (isView) {
             audio.sfx('finish');
@@ -906,6 +944,18 @@ export class Race {
     k.visScale = damp(k.visScale, targetScale, 10, dt);
     m.setSquash(k.visScale);
     m.setLandSquash(s.landSquash || 0);
+    // 落ちている最中はくるくる回りながら小さくなる。戻った直後は点滅
+    if (s.falling) {
+      m.group.rotation.z = s.fallTime * 5;
+      const shrink = Math.max(0.25, 1 - s.fallTime * 0.5);
+      m.group.scale.setScalar(shrink);
+      m.group.visible = true;
+    } else if (k._wasFalling || s.respawnTime > 0) {
+      m.group.rotation.z = 0;
+      m.group.scale.setScalar(1);
+      m.group.visible = s.respawnTime <= 0 || Math.floor(s.respawnTime * 12) % 2 === 0;
+    }
+    k._wasFalling = s.falling;
     if (s.starTime > 0) {
       m.setStar(this.clock);
       k.starWas = true;
