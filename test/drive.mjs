@@ -83,12 +83,13 @@ for (const course of COURSES) {
       await new Promise((res) => requestAnimationFrame(res));
       send(steerFor().steer);
     }
-    const st = { walls: 0, offroad: 0, frames: 0, miniTurbo: 0, driftFrames: 0, maxCharge: 0, maxTier: -1 };
+    const st = { walls: 0, offroad: 0, frames: 0, miniTurbo: 0, driftFrames: 0, maxCharge: 0, maxTier: -1, falls: 0 };
     const startLap = k.state.lap;
     const t0 = r.time;
     let holding = false;
     let wasDrifting = -1;
     let heldSince = 0;
+    let wasFalling = false;
     while (k.state.lap === startLap && r.time - t0 < 120 && st.frames < 20000) {
       await new Promise((res) => requestAnimationFrame(res));
       const { steer, q } = steerFor();
@@ -109,6 +110,10 @@ for (const course of COURSES) {
       st.frames++;
       if (q.surface === 'offroad') st.offroad++;
       if (q.surface === 'wall') st.walls++;
+      // 落ちた回数。手すりのないコースが「落ちてばかりで進めない」形で
+      // 壊れていないかを見る
+      if (k.state.falling && !wasFalling) st.falls++;
+      wasFalling = k.state.falling;
       if (k.state.drifting) {
         st.driftFrames++;
         st.maxCharge = Math.max(st.maxCharge, k.state.driftCharge);
@@ -138,6 +143,9 @@ for (const course of COURSES) {
   check(stats.finished && stats.lap < lapLimit, `タッチ操作だけで 1 周できる（${stats.lap} 秒 / ${lapLimit} 秒まで）`);
   check(stats.walls <= wallBudget, `壁に当たるのは ${wallBudget} 回まで（${stats.walls} 回）`);
   check(stats.offroadPct <= 25, `コース外に出るのは 25% まで（${stats.offroadPct}%）`);
+  // 手すりのないコースは落ちうるが、1 周に何度も落ちるようなら道が狭すぎる
+  const fallBudget = course.shoulder === 0 ? 2 : 0;
+  check(stats.falls <= fallBudget, `コースから落ちるのは ${fallBudget} 回まで（${stats.falls} 回）`);
   if (!NODRIFT) {
     check(stats.driftFrames > 0, `ドリフトボタンでドリフトに入れる（${stats.driftPct}%）`);
     check(stats.miniTurbo > 0, `ミニターボが出る（${stats.miniTurbo} 回 / 最大チャージ ${stats.maxCharge} 段 ${stats.maxTier}）`);
